@@ -1,0 +1,1058 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import express from 'express';
+import path from 'path';
+import fs from 'fs/promises';
+import { existsSync } from 'fs';
+import crypto from 'crypto';
+import dotenv from 'dotenv';
+import { createServer as createViteServer } from 'vite';
+import { Resend } from 'resend';
+
+// Load environment variables
+dotenv.config();
+
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+
+async function sendConfirmationEmail(booking: any, event: any) {
+  if (!resend) return;
+  try {
+    await resend.emails.send({
+      from: 'Zyron Productions <onboarding@resend.dev>',
+      replyTo: 'zyroninbox@gmail.com',
+      to: booking.guest_email,
+      subject: `Booking Confirmed: ${event.title}`,
+      html: `
+        <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; color: #7c3aed;">Zyron Productions - Admission Confirmed</h2>
+          <p>Booking Reference: <strong>${booking.id.split('-')[0].toUpperCase()}</strong></p>
+          <p>Event: <strong>${event.title}</strong></p>
+          <p>Guest: <strong>${booking.guest_name}</strong></p>
+          <p>Phone: <strong>${booking.guest_phone || 'N/A'}</strong></p>
+          ${booking.guest_instagram ? `<p>Instagram: <strong>${booking.guest_instagram}</strong></p>` : ''}
+          <p>Passes: <strong>${booking.quantity}x ${booking.tier.toUpperCase()}</strong></p>
+          <div style="text-align: center; margin: 24px 0;">
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${booking.id}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
+            <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission</p>
+          </div>
+          <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #737373;">Your secret coordinates and structural protocols will be sent 24 hours prior to the experience.</p>
+          <p style="font-size: 12px; color: #737373;">Need assistance? Contact us at zyroninbox@gmail.com</p>
+        </div>
+      `
+    });
+  } catch (err) {
+    console.error('Failed to send confirmation email:', err);
+  }
+}
+
+const app = express();
+const PORT = 3000;
+const DB_DIR = path.join(process.cwd(), 'data');
+const DB_PATH = path.join(DB_DIR, 'db.json');
+
+app.use(express.json());
+
+// Set up sessions cookie middleware helper
+import cookieParser from 'cookie-parser';
+app.use(cookieParser('zyron-secret-cookie-key-1337'));
+
+// Helper to ensure database is loaded and seeded
+async function initDb() {
+  try {
+    if (!existsSync(DB_DIR)) {
+      await fs.mkdir(DB_DIR, { recursive: true });
+    }
+
+    if (!existsSync(DB_PATH)) {
+      const initialDb = {
+        users: [
+          // Pre-seed some demo users
+          {
+            id: 'admin-uuid-1',
+            email: 'admin1@example.com',
+            passwordHash: crypto.createHash('sha256').update('password123').digest('hex'),
+            role: 'admin',
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'admin-uuid-2',
+            email: 'admin2@example.com',
+            passwordHash: crypto.createHash('sha256').update('password123').digest('hex'),
+            role: 'admin',
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'user-uuid-1',
+            email: 'user@example.com',
+            passwordHash: crypto.createHash('sha256').update('password123').digest('hex'),
+            role: 'user',
+            created_at: new Date().toISOString()
+          }
+        ],
+        events: [
+          {
+            id: 'event-uuid-1',
+            title: 'The Velvet Eclipse',
+            slug: 'the-velvet-eclipse',
+            teaser: 'A dark neo-noir ballroom experience under dim crimson and starlight.',
+            description: 'Step into an immersive, multi-sensory ballroom party where twilight and elegance merge. Featuring slow-tempo electronic beats, ambient post-rock, high-contrast monochrome installations, and premium mixology. Dressed in strict black or deep crimson, guests will wander through Mansion No. 9, discovering secret performance rooms, dynamic shadows, and high-fidelity sound. Tickets include welcome elixirs and entry into the velvet vault.',
+            event_date: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(), // 15 days in future
+            location: 'Mansion No. 9, Mumbai',
+            image_url: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200',
+            capacity: 150,
+            tickets_sold: 42,
+            general_price_cents: 150000, // ₹1,500
+            vip_price_cents: 350000,    // ₹3,500
+            group_price_cents: 800000,  // ₹8,000 (Group of 6)
+            earlybird_price_cents: 120000, // ₹1,200
+            couple_price_cents: 250000,   // ₹2,500
+            status: 'published',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'event-uuid-2',
+            title: 'Cyberpunk Halftone',
+            slug: 'cyberpunk-halftone',
+            teaser: 'A raw, high-contrast monochrome warehouse rave featuring industrial synths.',
+            description: 'An absolute contrast of light and dark. Set in a raw industrial warehouse, Cyberpunk Halftone transforms the physical space with 2D halftone pattern projectors, laser alignment guides, and intense retro-future modular synthesizers. Wear matte black, structured techwear, or pure reflective white. Experience heavy bass music, dark-wave, and digital distortion at its finest. Earplugs provided. Standard tickets cover entry, VIP includes balcony lounge access and private artist meet-up.',
+            event_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days in future
+            location: 'Warehouse 404, Bengaluru',
+            image_url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=1200',
+            capacity: 300,
+            tickets_sold: 112,
+            general_price_cents: 120000, // ₹1,200
+            vip_price_cents: 280000,    // ₹2,800
+            group_price_cents: 600000,  // ₹6,000 (Group of 6)
+            earlybird_price_cents: 100000, // ₹1,000
+            couple_price_cents: 200000,   // ₹2,000
+            status: 'published',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'event-uuid-3',
+            title: 'Monochrome Gala',
+            slug: 'monochrome-gala',
+            teaser: 'An elegant, hyper-minimalist black-and-white gala with live cello & post-rock.',
+            description: 'The annual high-society evening for creative disruptors. Styled in strict tuxedo or minimal black-and-white formal attire, Zyron Productions presents a hyper-focused orchestral chamber concert fused with cinematic post-rock textures. Diners will sit at a monolithic dark stone banquet table, enjoying an avant-garde monochrome course menu while surrounding canvases shift through dynamic algorithmic art. General pricing covers general seating; VIP grants front row banquet placement, bespoke gifting, and an exclusive collector-edition vinyl.',
+            event_date: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(), // 45 days in future
+            location: 'The Arch Pavilion, Delhi',
+            image_url: 'https://images.unsplash.com/photo-1469371670807-013ccf25f16a?q=80&w=1200',
+            capacity: 80,
+            tickets_sold: 79, // Almost sold out!
+            general_price_cents: 250000, // ₹2,500
+            vip_price_cents: 600000,    // ₹6,000
+            group_price_cents: 1200000, // ₹12,000 (Group of 6)
+            earlybird_price_cents: 200000, // ₹2,000
+            couple_price_cents: 450000,   // ₹4,500
+            status: 'published',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          },
+          {
+            id: 'event-uuid-4',
+            title: 'Retro-Future Echoes',
+            slug: 'retro-future-echoes',
+            teaser: 'A private synthwave penthouse soirée.',
+            description: 'An intimate rooftop session high above the Mumbai skyline. Expect retro analog drum machines, hazy neon aesthetics, and lo-fi house rhythms. Strict list only.',
+            event_date: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
+            location: 'Penthouse 88, Mumbai',
+            image_url: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=1200',
+            capacity: 50,
+            tickets_sold: 0,
+            general_price_cents: 200000,
+            vip_price_cents: 450000,
+            group_price_cents: 1000000,
+            earlybird_price_cents: 150000,
+            couple_price_cents: 350000,
+            status: 'draft',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+        ],
+        bookings: [
+          // Pre-seed some bookings to make analytics look complete!
+          {
+            id: 'booking-seed-1',
+            user_id: 'user-uuid-1',
+            event_id: 'event-uuid-1',
+            tier: 'general',
+            quantity: 2,
+            guest_name: 'Alex Rivera',
+            guest_email: 'user@example.com',
+            guest_phone: '+919876543210',
+            total_cents: 300000,
+            payment_status: 'paid',
+            payment_provider_ref: 'pay_seed_1',
+            dietary: 'None',
+            role_preference: 'Main Hall',
+            accessibility: '',
+            cancelled_at: null,
+            created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+            updated_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
+          },
+          {
+            id: 'booking-seed-2',
+            user_id: 'user-uuid-1',
+            event_id: 'event-uuid-2',
+            tier: 'vip',
+            quantity: 1,
+            guest_name: 'Alex Rivera',
+            guest_email: 'user@example.com',
+            guest_phone: '+919876543210',
+            total_cents: 280000,
+            payment_status: 'paid',
+            payment_provider_ref: 'pay_seed_2',
+            dietary: 'Gluten Free',
+            role_preference: 'VIP balcony',
+            accessibility: '',
+            cancelled_at: null,
+            created_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+            updated_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+          }
+        ],
+        gallery_items: [
+          {
+            id: 'gallery-1',
+            image_url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?q=80&w=600',
+            caption: 'The opening sparks of Zyron Eclipse, Delhi',
+            event_id: 'event-uuid-1',
+            sort_order: 1,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'gallery-2',
+            image_url: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=600',
+            caption: 'Warehouse acoustics testing under strobe illumination',
+            event_id: 'event-uuid-2',
+            sort_order: 2,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'gallery-3',
+            image_url: 'https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=600',
+            caption: 'Minimalist shadow dancing rehearsals',
+            event_id: 'event-uuid-3',
+            sort_order: 3,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'gallery-4',
+            image_url: 'https://images.unsplash.com/photo-1506157786151-b8491531f063?q=80&w=600',
+            caption: 'The main orchestrator overlooking the console',
+            event_id: 'event-uuid-2',
+            sort_order: 4,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'gallery-5',
+            image_url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600',
+            caption: 'Vinyl mastering session, raw cuts',
+            event_id: 'event-uuid-3',
+            sort_order: 5,
+            created_at: new Date().toISOString()
+          },
+          {
+            id: 'gallery-6',
+            image_url: 'https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?q=80&w=600',
+            caption: 'Guests arriving in pure black attire at the Arch Pavilion',
+            event_id: 'event-uuid-1',
+            sort_order: 6,
+            created_at: new Date().toISOString()
+          }
+        ]
+      };
+      await fs.writeFile(DB_PATH, JSON.stringify(initialDb, null, 2), 'utf-8');
+    }
+  } catch (err) {
+    console.error('Failed to initialize database:', err);
+  }
+}
+
+// Read database helper
+async function readDb() {
+  await initDb();
+  const raw = await fs.readFile(DB_PATH, 'utf-8');
+  const db = JSON.parse(raw);
+  if (!db.notifications) db.notifications = [];
+  return db;
+}
+
+// Write database helper
+async function writeDb(data: any) {
+  await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+// Auth Middleware
+async function getAuthUser(req: any) {
+  const token = req.cookies.session_token || req.headers['authorization']?.replace('Bearer ', '');
+  if (!token) return null;
+  const db = await readDb();
+  // Simple token matching user id (secure enough for a standalone node applet)
+  const user = db.users.find((u: any) => u.id === token);
+  return user || null;
+}
+
+async function requireAuth(req: any, res: any, next: any) {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized. Please sign in.' });
+  }
+  req.user = user;
+  next();
+}
+
+async function requireAdmin(req: any, res: any, next: any) {
+  const user = await getAuthUser(req);
+  if (!user || user.role !== 'admin') {
+    return res.status(403).json({ error: 'Forbidden. Admin access required.' });
+  }
+  req.user = user;
+  next();
+}
+
+// ------------------- API ROUTES -------------------
+
+// Authentication API
+app.post('/api/auth/signup', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password || password.length < 8) {
+    return res.status(400).json({ error: 'Valid email and password (minimum 8 characters) are required.' });
+  }
+  try {
+    const db = await readDb();
+    const normalizedEmail = email.toLowerCase().trim();
+    if (db.users.find((u: any) => u.email === normalizedEmail)) {
+      return res.status(400).json({ error: 'Email already registered.' });
+    }
+
+    // Role mapping based on prompt whitelist
+    const isAdminWhitelist = ['admin1@example.com', 'admin2@example.com', 'admin@zyron.com', 'sakethma007@gmail.com', 'zyroninbox@gmail.com'].includes(normalizedEmail);
+    const role = isAdminWhitelist ? 'admin' : 'user';
+
+    const newUser = {
+      id: crypto.randomUUID(),
+      email: normalizedEmail,
+      passwordHash: crypto.createHash('sha256').update(password).digest('hex'),
+      role,
+      created_at: new Date().toISOString()
+    };
+
+    db.users.push(newUser);
+    await writeDb(db);
+
+    // Auto log in on sign up
+    res.cookie('session_token', newUser.id, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'none', secure: true });
+    return res.json({ user: { id: newUser.id, email: newUser.email, role: newUser.role } });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required.' });
+  }
+  try {
+    const db = await readDb();
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = db.users.find((u: any) => u.email === normalizedEmail);
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    const hash = crypto.createHash('sha256').update(password).digest('hex');
+    if (user.passwordHash !== hash) {
+      return res.status(401).json({ error: 'Invalid email or password.' });
+    }
+
+    res.cookie('session_token', user.id, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, sameSite: 'none', secure: true });
+    return res.json({ user: { id: user.id, email: user.email, role: user.role } });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie('session_token', { sameSite: 'none', secure: true });
+  return res.json({ success: true });
+});
+
+app.get('/api/auth/me', async (req, res) => {
+  const user = await getAuthUser(req);
+  if (!user) {
+    return res.json({ user: null });
+  }
+  return res.json({ user: { id: user.id, email: user.email, role: user.role } });
+});
+
+
+// Public Events API
+app.get('/api/events', async (req, res) => {
+  try {
+    const db = await readDb();
+    const published = db.events.filter((e: any) => e.status === 'published');
+    // Sort by event_date ascending
+    published.sort((a: any, b: any) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+    return res.json(published);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/events/:slug', async (req, res) => {
+  try {
+    const db = await readDb();
+    const event = db.events.find((e: any) => e.slug === req.params.slug);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found' });
+    }
+    // Return event details
+    return res.json(event);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Public Gallery API
+app.get('/api/gallery', async (req, res) => {
+  try {
+    const db = await readDb();
+    const items = [...db.gallery_items];
+    items.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return res.json(items.slice(0, 60));
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Bookings API (Requires Authentication)
+app.get('/api/bookings/my', requireAuth, async (req: any, res) => {
+  try {
+    const db = await readDb();
+    const userBookings = db.bookings.filter((b: any) => b.user_id === req.user.id);
+    
+    // Join with event details
+    const result = userBookings.map((b: any) => {
+      const event = db.events.find((e: any) => e.id === b.event_id);
+      return {
+        ...b,
+        event_title: event?.title || 'Unknown Event',
+        event_slug: event?.slug || '',
+        event_date: event?.event_date || '',
+        event_location: event?.location || '',
+        event_image_url: event?.image_url || ''
+      };
+    });
+
+    // Sort by created_at descending
+    result.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return res.json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bookings', requireAuth, async (req: any, res) => {
+  const { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram } = req.body;
+  if (!event_id || !tier || !quantity || !guest_name || !guest_email || !guest_phone) {
+    return res.status(400).json({ error: 'All primary booking fields including phone are required.' });
+  }
+  if (quantity < 1 || quantity > 20) {
+    return res.status(400).json({ error: 'Invalid quantity. Max 20 tickets per booking.' });
+  }
+
+  try {
+    const db = await readDb();
+    const event = db.events.find((e: any) => e.id === event_id);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found.' });
+    }
+    if (event.status !== 'published') {
+      return res.status(400).json({ error: 'This event is not open for bookings.' });
+    }
+
+    let priceCents = 0;
+    if (tier === 'vip') priceCents = event.vip_price_cents;
+    else if (tier === 'group') priceCents = event.group_price_cents;
+    else if (tier === 'earlybird') priceCents = event.earlybird_price_cents;
+    else if (tier === 'couple') priceCents = event.couple_price_cents;
+    else priceCents = event.general_price_cents;
+
+    if (!priceCents || priceCents <= 0) {
+      return res.status(400).json({ error: 'Selected ticket tier is not available.' });
+    }
+
+    if (event.tickets_sold + quantity > event.capacity) {
+      return res.status(400).json({ error: 'Not enough tickets left for this tier/quantity.' });
+    }
+
+    // Atomic update of tickets_sold
+    event.tickets_sold += quantity;
+
+    const newBooking = {
+      id: crypto.randomUUID(),
+      user_id: req.user.id,
+      event_id,
+      tier,
+      quantity,
+      guest_name,
+      guest_email,
+      guest_phone,
+      guest_instagram: guest_instagram || '',
+      total_cents: priceCents * quantity,
+      payment_status: 'pending',
+      payment_provider_ref: '',
+      dietary: '',
+      role_preference: '',
+      accessibility: '',
+      cancelled_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    db.bookings.push(newBooking);
+    await writeDb(db);
+
+    return res.json(newBooking);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Update guest preferences per booking
+app.post('/api/bookings/:id/preferences', requireAuth, async (req: any, res) => {
+  const { dietary, role_preference, accessibility } = req.body;
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    // Security check: Must own booking, or be admin
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
+    }
+
+    booking.dietary = dietary || '';
+    booking.role_preference = role_preference || '';
+    booking.accessibility = accessibility || '';
+    booking.updated_at = new Date().toISOString();
+
+    await writeDb(db);
+    return res.json(booking);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Cancel a booking
+app.post('/api/bookings/:id/cancel', requireAuth, async (req: any, res) => {
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    // Check ownership or admin role
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
+    }
+
+    if (booking.cancelled_at) {
+      return res.status(400).json({ error: 'Booking is already cancelled.' });
+    }
+
+    // Release ticket inventory
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (event) {
+      event.tickets_sold = Math.max(0, event.tickets_sold - booking.quantity);
+    }
+
+    booking.cancelled_at = new Date().toISOString();
+    booking.payment_status = 'refunded';
+    booking.updated_at = new Date().toISOString();
+
+    await writeDb(db);
+    return res.json(booking);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// Simulated Payment Endpoint
+app.post('/api/bookings/:id/pay', requireAuth, async (req: any, res) => {
+  const { payment_ref } = req.body;
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden.' });
+    }
+
+    booking.payment_status = 'paid';
+    booking.payment_provider_ref = payment_ref || `pay_sim_${crypto.randomBytes(4).toString('hex')}`;
+    booking.updated_at = new Date().toISOString();
+
+    const newNotif = {
+      id: crypto.randomUUID(),
+      user_id: booking.user_id,
+      title: 'Payment Confirmed & Tickets Emailed',
+      message: `Payment of ₹${Math.round(booking.total_cents / 100).toLocaleString()} successfully processed. Your event tickets have been sent to ${booking.guest_email}.`,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    db.notifications.unshift(newNotif);
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (event) {
+      await sendConfirmationEmail(booking, event);
+    }
+
+    await writeDb(db);
+    return res.json(booking);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ------------------- RAZORPAY INTEGRATION -------------------
+import Razorpay from 'razorpay';
+
+let razorpayInstance: Razorpay | null = null;
+function getRazorpay() {
+  if (!razorpayInstance) {
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      return null;
+    }
+    razorpayInstance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+  }
+  return razorpayInstance;
+}
+
+app.get('/api/config/razorpay', (req, res) => {
+  res.json({ configured: !!getRazorpay(), key_id: process.env.RAZORPAY_KEY_ID || null });
+});
+
+// DEV BYPASS for Testing without Razorpay Key
+app.post('/api/bookings/:id/dev-bypass', requireAuth, async (req: any, res) => {
+  try {
+    const bookingId = req.params.id;
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === bookingId);
+    
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    booking.payment_status = 'paid';
+    booking.payment_provider_ref = 'dev_bypass_' + Date.now();
+    await writeDb(db);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bookings/:id/razorpay-order', requireAuth, async (req, res) => {
+  try {
+    const bookingId = req.params.id;
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === bookingId);
+    
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    if (booking.payment_status === 'paid') return res.status(400).json({ error: 'Already paid' });
+    
+    // Auth check
+    const reqUser = (req as any).user;
+    if (booking.user_id !== reqUser.id && reqUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    const rzp = getRazorpay();
+    if (!rzp) {
+      return res.status(500).json({ error: 'Razorpay keys not configured on server' });
+    }
+
+    const options = {
+      amount: booking.total_cents, // amount in the smallest currency unit
+      currency: "INR",
+      receipt: booking.id,
+    };
+
+    const order = await rzp.orders.create(options);
+    res.json({ orderId: order.id, amount: order.amount, currency: order.currency });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/bookings/:id/verify-razorpay', requireAuth, async (req, res) => {
+  try {
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+    const bookingId = req.params.id;
+    
+    if (!process.env.RAZORPAY_KEY_SECRET) {
+      return res.status(500).json({ error: 'Razorpay Secret Key not configured on server' });
+    }
+
+    const hmac = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
+    hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
+    const generated_signature = hmac.digest('hex');
+
+    if (generated_signature !== razorpay_signature) {
+      return res.status(400).json({ error: 'Invalid payment signature' });
+    }
+
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === bookingId);
+    if (!booking) return res.status(404).json({ error: 'Booking not found' });
+    
+    // Auth check
+    const reqUser = (req as any).user;
+    if (booking.user_id !== reqUser.id && reqUser.role !== 'admin') {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Mark as paid
+    booking.payment_status = 'paid';
+    
+    // Create notification
+    const newNotif = {
+      id: crypto.randomUUID(),
+      user_id: booking.user_id,
+      title: 'Payment Confirmed & Tickets Emailed',
+      message: `Payment of ₹${Math.round(booking.total_cents / 100).toLocaleString()} successfully processed via Razorpay. Your event tickets have been sent to ${booking.guest_email}.`,
+      is_read: false,
+      created_at: new Date().toISOString(),
+    };
+    db.notifications.unshift(newNotif);
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (event) {
+      await sendConfirmationEmail(booking, event);
+    }
+
+    await writeDb(db);
+    return res.json({ success: true, booking });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ------------------- ADMIN API ROUTES -------------------
+
+// Admin events list
+app.get('/api/admin/events', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+    // Sort by created_at desc for administration
+    const events = [...db.events];
+    events.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    return res.json(events);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin upsert event
+app.post('/api/admin/events', requireAdmin, async (req, res) => {
+  const {
+    id, title, teaser, description, event_date, location, image_url,
+    capacity, general_price, vip_price, group_price, earlybird_price, couple_price, status
+  } = req.body;
+
+  if (!title || !location || !event_date || !capacity) {
+    return res.status(400).json({ error: 'Title, Location, Date, and Capacity are required.' });
+  }
+
+  try {
+    const db = await readDb();
+    
+    // Convert ₹ back to cents
+    const general_price_cents = Math.round((parseFloat(general_price) || 0) * 100);
+    const vip_price_cents = Math.round((parseFloat(vip_price) || 0) * 100);
+    const group_price_cents = Math.round((parseFloat(group_price) || 0) * 100);
+    const earlybird_price_cents = Math.round((parseFloat(earlybird_price) || 0) * 100);
+    const couple_price_cents = Math.round((parseFloat(couple_price) || 0) * 100);
+
+    // Create slug from title if not specified
+    let baseSlug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    let slug = baseSlug;
+    let count = 1;
+    
+    while (db.events.find((e: any) => e.slug === slug && e.id !== id)) {
+      count++;
+      slug = `${baseSlug}-${count}`;
+    }
+
+    if (id) {
+      // Edit mode
+      const eventIndex = db.events.findIndex((e: any) => e.id === id);
+      if (eventIndex === -1) {
+        return res.status(404).json({ error: 'Event not found to update.' });
+      }
+
+      const existing = db.events[eventIndex];
+      if (capacity < existing.tickets_sold) {
+        return res.status(400).json({ error: `Cannot decrease capacity below current tickets sold (${existing.tickets_sold}).` });
+      }
+
+      db.events[eventIndex] = {
+        ...existing,
+        title,
+        slug,
+        teaser: teaser || '',
+        description: description || '',
+        event_date,
+        location,
+        image_url: image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200',
+        capacity: parseInt(capacity),
+        general_price_cents,
+        vip_price_cents,
+        group_price_cents,
+        earlybird_price_cents,
+        couple_price_cents,
+        status: status || 'draft',
+        updated_at: new Date().toISOString()
+      };
+
+      await writeDb(db);
+      return res.json(db.events[eventIndex]);
+    } else {
+      // Create mode
+      const newEvent = {
+        id: crypto.randomUUID(),
+        title,
+        slug,
+        teaser: teaser || '',
+        description: description || '',
+        event_date,
+        location,
+        image_url: image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200',
+        capacity: parseInt(capacity),
+        tickets_sold: 0,
+        general_price_cents,
+        vip_price_cents,
+        group_price_cents,
+        earlybird_price_cents,
+        couple_price_cents,
+        status: status || 'draft',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      db.events.push(newEvent);
+      await writeDb(db);
+      return res.json(newEvent);
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Delete Event
+app.delete('/api/admin/events/:id', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+    const eventId = req.params.id;
+
+    // Check if event has any active paid/pending bookings
+    const activeBookings = db.bookings.filter((b: any) => b.event_id === eventId && b.cancelled_at === null);
+    if (activeBookings.length > 0) {
+      return res.status(400).json({
+        error: 'Cannot delete event with active bookings. Please archive the event instead or cancel existing bookings first.'
+      });
+    }
+
+    // Cascade delete gallery items or bookings which are cancelled
+    db.events = db.events.filter((e: any) => e.id !== eventId);
+    db.bookings = db.bookings.filter((b: any) => b.event_id !== eventId);
+    db.gallery_items = db.gallery_items.filter((gi: any) => gi.event_id !== eventId);
+
+    await writeDb(db);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Get Event Guests
+app.get('/api/admin/events/:id/guests', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+    const guests = db.bookings.filter((b: any) => b.event_id === req.params.id);
+    return res.json(guests);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Check In Guest
+app.post('/api/admin/bookings/:id/checkin', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+    if (booking.checked_in) {
+      return res.status(400).json({ error: 'Guest already checked in.' });
+    }
+    booking.checked_in = true;
+    booking.checked_in_at = new Date().toISOString();
+    await writeDb(db);
+    return res.json({ success: true, booking });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Add Gallery Item
+app.post('/api/admin/gallery', requireAdmin, async (req, res) => {
+  const { image_url, caption, event_id, sort_order } = req.body;
+  if (!image_url) {
+    return res.status(400).json({ error: 'Image URL is required.' });
+  }
+  try {
+    const db = await readDb();
+    const newItem = {
+      id: crypto.randomUUID(),
+      image_url,
+      caption: caption || '',
+      event_id: event_id || null,
+      sort_order: parseInt(sort_order) || 0,
+      created_at: new Date().toISOString()
+    };
+    db.gallery_items.push(newItem);
+    await writeDb(db);
+    return res.json(newItem);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Delete Gallery Item
+app.delete('/api/admin/gallery/:id', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+    db.gallery_items = db.gallery_items.filter((item: any) => item.id !== req.params.id);
+    await writeDb(db);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Analytics
+app.get('/api/admin/analytics', requireAdmin, async (req, res) => {
+  try {
+    const db = await readDb();
+
+    // Sum paid bookings total_cents
+    const paidBookings = db.bookings.filter((b: any) => b.payment_status === 'paid' && b.cancelled_at === null);
+    const totalRevenueCents = paidBookings.reduce((sum: number, b: any) => sum + b.total_cents, 0);
+    const paidBookingsCount = paidBookings.length;
+
+    // Capacity stats across all published/archived events
+    const activeEvents = db.events.filter((e: any) => e.status !== 'archived');
+    const totalCapacity = activeEvents.reduce((sum: number, e: any) => sum + e.capacity, 0);
+    const ticketsSold = activeEvents.reduce((sum: number, e: any) => sum + e.tickets_sold, 0);
+
+    // Tier breakdown
+    const tierBreakdown = { general: 0, vip: 0, group: 0, earlybird: 0, couple: 0 };
+    paidBookings.forEach((b: any) => {
+      if (b.tier === 'vip') tierBreakdown.vip += b.quantity;
+      else if (b.tier === 'group') tierBreakdown.group += b.quantity;
+      else if (b.tier === 'earlybird') tierBreakdown.earlybird += b.quantity;
+      else if (b.tier === 'couple') tierBreakdown.couple += b.quantity;
+      else tierBreakdown.general += b.quantity;
+    });
+
+    // Repeat buyer rate
+    const buyerCounts: { [email: string]: number } = {};
+    paidBookings.forEach((b: any) => {
+      const email = b.guest_email.toLowerCase();
+      buyerCounts[email] = (buyerCounts[email] || 0) + 1;
+    });
+    const uniqueBuyers = Object.keys(buyerCounts).length;
+    const repeatBuyers = Object.values(buyerCounts).filter((cnt: number) => cnt > 1).length;
+    const repeatBuyerRate = uniqueBuyers > 0 ? Math.round((repeatBuyers / uniqueBuyers) * 100) : 0;
+
+    // Per event metrics
+    const eventStats = db.events.map((e: any) => {
+      const eventPaidBookings = db.bookings.filter((b: any) => b.event_id === e.id && b.payment_status === 'paid' && b.cancelled_at === null);
+      const revenueCents = eventPaidBookings.reduce((sum: number, b: any) => sum + b.total_cents, 0);
+      return {
+        id: e.id,
+        title: e.title,
+        event_date: e.event_date,
+        tickets_sold: e.tickets_sold,
+        capacity: e.capacity,
+        revenueCents
+      };
+    });
+
+    return res.json({
+      totalRevenueCents,
+      paidBookingsCount,
+      ticketsSold,
+      totalCapacity,
+      tierBreakdown,
+      repeatBuyerRate,
+      eventStats
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ------------------- VITE & STATIC SERVING -------------------
+
+async function startServer() {
+  await initDb();
+
+  // If in development, run Vite dev server as middleware
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    // Serve production static assets
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Zyron Productions server running on http://localhost:${PORT}`);
+  });
+}
+
+startServer();

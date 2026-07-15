@@ -1,0 +1,6 @@
+{
+  "name": "Zyron Productions",
+  "description": "A high-end, minimalist event production platform for booking themed parties, exclusive experiences, and managing ticket inventory.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
