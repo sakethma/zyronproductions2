@@ -48,12 +48,18 @@ export default function EventDetail({
   const [guestPhone, setGuestPhone] = useState('');
   const [guestInstagram, setGuestInstagram] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [hasPrefilled, setHasPrefilled] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/config/razorpay').then(r => r.json()).then(data => {
       setRazorpayConfig(data);
     }).catch(() => {});
   }, []);
+
+  // Reset pre-fill flag when moving to a different event
+  useEffect(() => {
+    setHasPrefilled(false);
+  }, [slug]);
 
   // Find the event in the list or refetch
   useEffect(() => {
@@ -80,7 +86,7 @@ export default function EventDetail({
 
   // Restore guest form values from localStorage if returning from redirect
   useEffect(() => {
-    if (event) {
+    if (event && !hasPrefilled) {
       const saved = localStorage.getItem(`pending_booking_${event.id}`);
       if (saved) {
         try {
@@ -92,14 +98,16 @@ export default function EventDetail({
           setGuestPhone(parsed.guest_phone || '');
           // Remove to avoid stales
           localStorage.removeItem(`pending_booking_${event.id}`);
+          setHasPrefilled(true);
         } catch (_) {}
       } else if (user) {
         // Pre-fill user info if signed in
         setGuestEmail(user.email);
         setGuestName(user.email.split('@')[0]);
+        setHasPrefilled(true);
       }
     }
-  }, [event, user]);
+  }, [event, user, hasPrefilled]);
 
   if (isLoading) {
     return (

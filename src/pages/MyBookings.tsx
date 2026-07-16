@@ -425,6 +425,17 @@ export default function MyBookings({
                             </button>
                           )}
 
+                          {booking.payment_status === 'paid' && (
+                            <button
+                              id={`view-ticket-btn-${booking.id}`}
+                              onClick={() => setActivePass(booking)}
+                              className="w-full bg-violet-600 hover:bg-violet-700 text-white py-2.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer flex items-center justify-center space-x-1.5"
+                            >
+                              <Ticket className="h-4 w-4" />
+                              <span>View Admission Ticket</span>
+                            </button>
+                          )}
+
                           <div className="flex w-full">
                             <button
                               id={`pref-btn-${booking.id}`}

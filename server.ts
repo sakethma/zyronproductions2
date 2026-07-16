@@ -55,7 +55,7 @@ if (smtpUser && smtpPass) {
 }
 
 async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }) {
-  // 1. Try Gmail SMTP first if configured
+  // Gmail SMTP is the sole configured and authorized mail provider
   if (transporter) {
     const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
     try {
@@ -71,35 +71,13 @@ async function sendMail({ to, subject, html, text }: { to: string; subject: stri
       return { success: true, service: 'SMTP', id: info.messageId };
     } catch (err: any) {
       console.error('SMTP sending failed:', err);
+      return { success: false, error: err.message || 'SMTP sending failed' };
     }
   }
 
-  // 2. Try Resend if SMTP is not configured or failed, and Resend is configured
-  if (resend) {
-    try {
-      const { data, error } = await resend.emails.send({
-        from: RESEND_FROM,
-        replyTo: 'zyroninbox@gmail.com',
-        to,
-        subject,
-        html: html || text,
-        text: text
-      });
-      if (error) {
-        console.error('Resend email failed:', error);
-        return { success: false, error: error.message };
-      }
-      console.log('Email sent successfully via Resend. Email ID:', data?.id);
-      return { success: true, service: 'Resend', id: data?.id };
-    } catch (err: any) {
-      console.error('Resend email failed due to exception:', err);
-      return { success: false, error: err.message };
-    }
-  }
-
-  console.log(`[EMAIL NOT SENT - NO CONFIG] To: ${to}, Subject: ${subject}`);
+  console.log(`[EMAIL NOT SENT - NO SMTP CONFIG] To: ${to}, Subject: ${subject}`);
   if (text) console.log(`[TEXT]: ${text}`);
-  return { success: false, error: 'No email service (SMTP or Resend) is configured.' };
+  return { success: false, error: 'Gmail SMTP is not configured. Please define SMTP_USER and SMTP_PASS environment variables.' };
 }
 
 async function sendConfirmationEmail(booking: any, event: any) {
@@ -854,6 +832,23 @@ app.post('/api/bookings/:id/dev-bypass', requireAuth, async (req: AuthRequest, r
 
     booking.payment_status = 'paid';
     booking.payment_provider_ref = 'dev_bypass_' + Date.now();
+
+    // Create notification
+    const newNotif = {
+      id: crypto.randomUUID(),
+      user_id: booking.user_id,
+      title: 'Payment Confirmed & Tickets Emailed',
+      message: `Payment of ₹${Math.round(booking.total_cents / 100).toLocaleString()} successfully processed (Bypass). Your event tickets have been sent to ${booking.guest_email}.`,
+      read: false,
+      created_at: new Date().toISOString(),
+    };
+    db.notifications.unshift(newNotif);
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (event) {
+      await sendConfirmationEmail(booking, event);
+    }
+
     await writeDb(db);
     return res.json({ success: true });
   } catch (err: any) {

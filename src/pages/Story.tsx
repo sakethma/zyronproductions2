@@ -16,11 +16,11 @@ export default function Story() {
             THE MANIFESTO
           </span>
           <h1 className="font-serif text-4xl md:text-7xl font-semibold tracking-tight text-violet-600 dark:text-violet-500 leading-[1.05]">
-            Art in High Contrast. <br />
-            Events in Low Light.
+            Visions in Deep Black. <br />
+            Energy in Ultraviolet.
           </h1>
           <p className="font-sans text-lg md:text-2xl text-neutral-500 dark:text-neutral-400 font-light leading-relaxed max-w-3xl pt-4">
-            <span className="text-violet-600 dark:text-violet-500 font-semibold">Zyron</span> Productions was established in Mumbai to challenge standard commercial nightlife. We believe an event is not just a room with music; it is an active canvas of architecture, sensory boundaries, and curation.
+            <span className="text-violet-600 dark:text-violet-500 font-semibold">Zyron</span> Productions was established in Hyderabad to disrupt the standard digital and visual landscape. We believe an experience is not just a screen with pixels or a standard layout; it is an active canvas of dimension, sensory immersion, and cutting-edge curation.
           </p>
         </div>
       </section>
@@ -33,16 +33,16 @@ export default function Story() {
           </h2>
           <div className="w-12 h-1 bg-neutral-900 dark:bg-white"></div>
           <p className="text-sm font-mono tracking-wider text-neutral-400 uppercase">
-            EST. MUMBAI, 2024
+            EST. HYDERABAD, 2026
           </p>
         </div>
 
         <div className="lg:col-span-7 space-y-8 font-light text-neutral-600 dark:text-neutral-400 text-base leading-relaxed">
           <p>
-            The modern social experience has become cluttered with visual noise, generic glowing setups, and predictable patterns. <span className="text-violet-600 dark:text-violet-500 font-semibold">Zyron</span> rejects the default. We constrain our palette to monochrome — letting raw materials, shadows, high-contrast shapes, and physical structures tell the story.
+            The modern digital and social experience has become cluttered with corporate stiffness, rigid templates, and predictable, safe patterns. <span className="text-violet-600 dark:text-violet-500 font-semibold">Zyron</span> rejects the default. We constrain our palette to the cosmos — deep black voids pierced by electric magenta, wet chrome, and liquid violet — letting high-end aesthetics, raw atmospheric energy, and bold 3D elements tell the story.
           </p>
           <p>
-            Every venue we select is unique. From hidden brick basements in Lower Parel to derelict concrete silos in Bengaluru, we work with the environment, never overriding its natural acoustics or structural soul.
+            Every universe we build is unique. From high-energy streetwear drops to hyper-immersive digital platforms, we work with the limitless boundaries of the digital environment, never overriding its edge, but amplifying its pulse.
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8">
