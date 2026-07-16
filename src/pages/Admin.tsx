@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
-import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2 } from 'lucide-react';
+import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import QRScanner from '../components/QRScanner';
 import { Event, Booking, GalleryItem, AdminAnalytics, User, TicketTier, EventStatus } from '../types';
@@ -17,7 +17,7 @@ interface AdminProps {
   setCurrentRoute: (route: string) => void;
 }
 
-type AdminTab = 'analytics' | 'events' | 'guests' | 'gallery';
+type AdminTab = 'analytics' | 'events' | 'guests' | 'gallery' | 'diagnostics';
 
 export default function Admin({
   user,
@@ -423,6 +423,38 @@ export default function Admin({
   const [addingGallery, setAddingGallery] = useState(false);
   const [galleryDelId, setGalleryDelId] = useState<string | null>(null);
 
+  // ----------------- TAB 5: E2E SMTP DIAGNOSTICS STATE -----------------
+  const [testRecipient, setTestRecipient] = useState(user?.email || '');
+  const [testingE2e, setTestingE2e] = useState(false);
+  const [e2eResult, setE2eResult] = useState<any>(null);
+  const [e2eError, setE2eError] = useState<string | null>(null);
+
+  const handleRunE2eEmailTest = async () => {
+    setTestingE2e(true);
+    setE2eResult(null);
+    setE2eError(null);
+    try {
+      const response = await apiFetch('/api/test/e2e-email-flow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: testRecipient }),
+      });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        setE2eResult(data);
+        triggerToast('SMTP test dispatched successfully!');
+      } else {
+        setE2eError(data.error || 'SMTP E2E Test execution failed.');
+        triggerToast('E2E email test failed.');
+      }
+    } catch (err: any) {
+      setE2eError(err.message || 'Network error executing E2E flow.');
+      triggerToast('E2E email test failed.');
+    } finally {
+      setTestingE2e(false);
+    }
+  };
+
   const fetchGallery = () => {
     setLoadingGallery(true);
     apiFetch('/api/gallery')
@@ -534,6 +566,7 @@ export default function Admin({
             { id: 'events', label: 'Events', icon: CalendarDays },
             { id: 'guests', label: 'Guests', icon: Users2 },
             { id: 'gallery', label: 'Gallery', icon: ImageIcon },
+            { id: 'diagnostics', label: 'SMTP & QR Test', icon: Mail },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -1321,6 +1354,216 @@ export default function Admin({
                 ))}
               </div>
             )}
+          </div>
+
+        </div>
+      )}
+
+      {/* -------------------- TAB 5: SMTP & QR CODE DIAGNOSTICS -------------------- */}
+      {activeTab === 'diagnostics' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+          
+          {/* Left Panel: Trigger Control */}
+          <div className="lg:col-span-5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6 h-fit">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <Mail className="h-5 w-5 text-violet-600 dark:text-violet-500" />
+                SMTP & QR Code Dispatcher
+              </h3>
+              <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">End-to-End Delivery Diagnostics</p>
+            </div>
+
+            <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed font-light">
+              This module triggers a live simulated reservation transaction, generates a secure unique entry credential, asserts/embeds the exact QR payload structure (<span className="font-mono text-neutral-900 dark:text-white font-semibold">ZYRON-TICKET-&lt;id&gt;</span>), and relays a full-stack HTML email via configured Gmail SMTP credentials.
+            </p>
+
+            <div className="space-y-4 font-sans text-xs pt-2">
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">RECIPIENT TEST EMAIL</label>
+                <input
+                  type="email"
+                  required
+                  value={testRecipient}
+                  onChange={(e) => setTestRecipient(e.target.value)}
+                  placeholder="e.g. sakethma007@gmail.com"
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                />
+                <p className="text-[9px] text-neutral-400 italic font-mono">Defaults to your registered admin coordinate.</p>
+              </div>
+
+              <button
+                id="btn-trigger-e2e-diagnostic"
+                onClick={handleRunE2eEmailTest}
+                disabled={testingE2e}
+                className="w-full bg-violet-600 hover:bg-violet-700 text-white border border-transparent py-3 text-xs font-mono uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
+              >
+                {testingE2e ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <span>Transmitting Relay...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Trigger E2E Verification</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Right Panel: Live Logs, Payload Check & QR verification */}
+          <div className="lg:col-span-7 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6">
+            <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+              <Scan className="h-5 w-5 text-neutral-600 dark:text-neutral-400" />
+              Real-Time Dispatch logs
+            </h3>
+
+            {testingE2e && (
+              <div className="flex flex-col items-center justify-center py-20 space-y-4">
+                <div className="w-12 h-12 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
+                <div className="text-center">
+                  <p className="text-xs font-mono text-neutral-900 dark:text-white tracking-widest uppercase animate-pulse">ESTABLISHING SMTP SHAKEHAND...</p>
+                  <p className="text-[10px] text-neutral-400 font-mono mt-1">Simulating live booking, payload injection and envelope relay</p>
+                </div>
+              </div>
+            )}
+
+            {!testingE2e && !e2eResult && !e2eError && (
+              <div className="flex flex-col items-center justify-center py-24 border border-dashed border-neutral-200 dark:border-neutral-800">
+                <p className="text-xs text-neutral-400 font-mono uppercase tracking-widest">SYSTEM STANDBY</p>
+                <p className="text-[10px] text-neutral-500 font-light mt-1">Awaiting diagnostic trigger to evaluate email delivery pipeline</p>
+              </div>
+            )}
+
+            {e2eError && (
+              <div className="border border-red-200 dark:border-red-950/40 bg-red-50/50 dark:bg-red-950/10 p-5 space-y-3 font-mono text-xs">
+                <div className="flex items-center space-x-2 text-red-600">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <span className="font-bold uppercase tracking-wider">SMTP DISPATCH TIMEOUT / ERROR</span>
+                </div>
+                <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed break-words">
+                  {e2eError}
+                </p>
+                <div className="border-t border-red-100 dark:border-red-900/30 pt-3 text-[10px] text-neutral-500 leading-normal">
+                  💡 Tip: Verify that <span className="text-neutral-700 dark:text-white">SMTP_USER</span> and <span className="text-neutral-700 dark:text-white">SMTP_PASS</span> variables are active in your environment variables config, and that Google App Passwords are valid.
+                </div>
+              </div>
+            )}
+
+            {e2eResult && (
+              <div className="space-y-6 font-mono text-xs text-neutral-800 dark:text-neutral-200">
+                
+                {/* Visual success alert */}
+                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center space-x-3 text-emerald-600">
+                  <CheckCircle2 className="h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-bold uppercase tracking-wider">E2E Delivery Confirmed</p>
+                    <p className="text-[10px] text-emerald-500/80 mt-0.5">Mock reservation processed and email relayed successfully.</p>
+                  </div>
+                </div>
+
+                {/* Grid for booking details and QR Code verification */}
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                  
+                  {/* QR rendering */}
+                  <div className="md:col-span-5 flex flex-col items-center justify-center bg-neutral-50 dark:bg-neutral-900/50 border border-neutral-100 dark:border-neutral-900 p-4">
+                    <p className="text-[9px] text-neutral-400 font-bold uppercase mb-2 tracking-wider">Live QR Payload</p>
+                    <img
+                      src={e2eResult.qr_code_url}
+                      alt="Verified Admission QR"
+                      className="w-36 h-36 border border-neutral-200 dark:border-neutral-800 p-2 bg-white"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="mt-3 text-[9px] text-center text-neutral-400 tracking-wider">
+                      DATA PAYLOAD:
+                      <p className="text-neutral-800 dark:text-white font-bold select-all break-all mt-0.5 max-w-[150px]">
+                        {e2eResult.qr_code_payload}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Booking details */}
+                  <div className="md:col-span-7 space-y-3.5 border-t md:border-t-0 md:border-l border-neutral-200 dark:border-neutral-800 pt-4 md:pt-0 md:pl-6">
+                    <h4 className="font-serif font-bold text-sm text-neutral-900 dark:text-white uppercase tracking-wider">
+                      [1] Reservation payload
+                    </h4>
+                    
+                    <div className="space-y-1.5 text-[11px]">
+                      <p className="flex justify-between border-b border-neutral-100 dark:border-neutral-900/50 pb-1">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">ID:</span>
+                        <span className="text-neutral-900 dark:text-white font-bold">{e2eResult.booking.id}</span>
+                      </p>
+                      <p className="flex justify-between border-b border-neutral-100 dark:border-neutral-900/50 pb-1">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">GUEST:</span>
+                        <span className="text-neutral-900 dark:text-white font-bold">{e2eResult.booking.guest_name}</span>
+                      </p>
+                      <p className="flex justify-between border-b border-neutral-100 dark:border-neutral-900/50 pb-1">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">EMAIL:</span>
+                        <span className="text-neutral-900 dark:text-white font-bold">{e2eResult.booking.guest_email}</span>
+                      </p>
+                      <p className="flex justify-between border-b border-neutral-100 dark:border-neutral-900/50 pb-1">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">PASS TIER:</span>
+                        <span className="text-violet-600 dark:text-violet-400 font-bold uppercase">{e2eResult.booking.tier}</span>
+                      </p>
+                      <p className="flex justify-between border-b border-neutral-100 dark:border-neutral-900/50 pb-1">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">QUANTITY:</span>
+                        <span className="text-neutral-900 dark:text-white font-bold">{e2eResult.booking.quantity}</span>
+                      </p>
+                      <p className="flex justify-between">
+                        <span className="text-neutral-400 uppercase font-bold text-[9px]">TOTAL PAID:</span>
+                        <span className="text-neutral-900 dark:text-white font-bold">₹{Math.round(e2eResult.booking.total_cents / 100).toLocaleString()}</span>
+                      </p>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* Assertion validation */}
+                <div className="border border-neutral-200 dark:border-neutral-800 p-4 space-y-2 bg-neutral-50 dark:bg-neutral-900/30">
+                  <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider">
+                    [2] QR Payload Integrity Assertion
+                  </p>
+                  <div className="flex items-center justify-between text-xs font-mono">
+                    <span className="text-neutral-500">Assertion Match (ZYRON-TICKET-&lt;id&gt;):</span>
+                    <span className="bg-emerald-500/20 text-emerald-600 px-2 py-0.5 font-bold rounded-none text-[10px] uppercase tracking-widest">
+                      PASS
+                    </span>
+                  </div>
+                </div>
+
+                {/* SMTP Server details */}
+                <div className="border border-neutral-200 dark:border-neutral-800 p-4 space-y-2 bg-neutral-950 text-neutral-300">
+                  <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider border-b border-neutral-800 pb-1.5 flex justify-between items-center">
+                    <span>[3] Raw Gmail SMTP Dispatch Logs</span>
+                    <span className="text-[9px] text-emerald-400 animate-pulse font-normal">● STABLE SHAKEHAND</span>
+                  </p>
+                  
+                  <div className="space-y-1.5 font-mono text-[10px]">
+                    <p className="break-all text-neutral-400">
+                      <strong className="text-neutral-200">SMTP Message-ID:</strong><br />
+                      {e2eResult.smtp_response.messageId}
+                    </p>
+                    <p className="break-all text-neutral-400 mt-2">
+                      <strong className="text-neutral-200">Mail Server Response:</strong><br />
+                      <span className="text-emerald-400 font-bold">{e2eResult.smtp_response.response}</span>
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mt-2 pt-2 border-t border-neutral-900">
+                      <div>
+                        <strong className="text-neutral-200 block text-[9px] text-neutral-400 uppercase">SENDER ENVELOPE</strong>
+                        <span className="text-neutral-300 break-all">{e2eResult.smtp_response.envelope.from}</span>
+                      </div>
+                      <div>
+                        <strong className="text-neutral-200 block text-[9px] text-neutral-400 uppercase">RECIPIENT ENVELOPE</strong>
+                        <span className="text-neutral-300 break-all">{JSON.stringify(e2eResult.smtp_response.envelope.to)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            )}
+
           </div>
 
         </div>

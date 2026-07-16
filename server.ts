@@ -550,6 +550,153 @@ app.post('/api/smtp/test', async (req, res) => {
   }
 });
 
+app.post('/api/test/e2e-email-flow', async (req, res) => {
+  const { email } = req.body;
+  const recipient = email ? email.trim() : 'sakethma007@gmail.com';
+
+  if (!transporter) {
+    return res.status(400).json({
+      success: false,
+      error: 'SMTP is not configured. Please define SMTP_USER and SMTP_PASS environment variables.'
+    });
+  }
+
+  try {
+    const db = await readDb();
+
+    // 0. Find or create a test user to satisfy the foreign key reference
+    let userUid = 'test-user-id';
+    const existingUsers = await drizzleDb.select().from(users).limit(1);
+    if (existingUsers.length > 0) {
+      userUid = existingUsers[0].uid;
+    } else {
+      await drizzleDb.insert(users).values({
+        uid: userUid,
+        email: recipient,
+        role: 'user',
+        password_hash: '',
+      });
+    }
+    
+    // 1. Find or create a test event
+    let event = db.events.find((e: any) => e.status === 'published');
+    if (!event) {
+      event = {
+        id: 'test-event-uuid-123',
+        title: 'Quantum Resonance',
+        slug: 'quantum-resonance-test',
+        teaser: 'Sonic frequencies and spatial boundaries',
+        description: 'An interactive audio-visual space test.',
+        event_date: new Date(Date.now() + 86400000 * 7).toISOString(), // 7 days from now
+        location: 'Zyron Test Portal, Hyderabad',
+        image_url: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1200',
+        capacity: 100,
+        tickets_sold: 0,
+        general_price_cents: 150000,
+        vip_price_cents: 300000,
+        group_price_cents: 120000,
+        earlybird_price_cents: 100000,
+        couple_price_cents: 250000,
+        status: 'published',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      db.events.push(event);
+    }
+
+    // 2. Create a mock booking
+    const bookingId = crypto.randomUUID();
+    const mockBooking = {
+      id: bookingId,
+      user_id: userUid,
+      event_id: event.id,
+      tier: 'vip',
+      quantity: 2,
+      guest_name: 'Test Guest Hyderabad',
+      guest_email: recipient,
+      guest_phone: '+919999999999',
+      guest_instagram: 'zyron.test',
+      total_cents: event.vip_price_cents * 2,
+      payment_status: 'paid',
+      payment_provider_ref: 'test_bypass_' + Date.now(),
+      dietary: 'None',
+      role_preference: 'Spectator',
+      accessibility: 'None',
+      cancelled_at: null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    
+    db.bookings.push(mockBooking);
+    
+    const newNotif = {
+      id: crypto.randomUUID(),
+      user_id: userUid,
+      title: 'Test Payment Confirmed & Tickets Emailed',
+      message: `Test booking of ₹${Math.round(mockBooking.total_cents / 100).toLocaleString()} successfully processed. Tickets sent to ${mockBooking.guest_email}.`,
+      read: false,
+      created_at: new Date().toISOString(),
+    };
+    db.notifications.unshift(newNotif);
+
+    await writeDb(db);
+
+    // 3. Send confirmation email
+    const htmlPayload = `
+      <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+        <h1 style="color: #7c3aed; text-align: center; margin-bottom: 24px; font-family: serif;">Congratulations! 🎉</h1>
+        <p style="font-size: 16px; text-align: center; margin-bottom: 32px; font-weight: bold;">[TEST RUN] Your spot at ${event.title} is officially secured.</p>
+        
+        <div style="background-color: white; padding: 20px; border: 1px solid #e5e5e5; margin-bottom: 24px;">
+          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; font-size: 14px; margin-top: 0; color: #737373;">Admission Details</h2>
+          <p style="margin: 8px 0;">Booking Ref: <strong style="color: #7c3aed;">${mockBooking.id.split('-')[0].toUpperCase()}</strong></p>
+          <p style="margin: 8px 0;">Event: <strong>${event.title}</strong></p>
+          <p style="margin: 8px 0;">Guest: <strong>${mockBooking.guest_name}</strong></p>
+          <p style="margin: 8px 0;">Passes: <strong>${mockBooking.quantity}x ${mockBooking.tier.toUpperCase()}</strong></p>
+        </div>
+
+        <div style="text-align: center; margin: 32px 0;">
+          <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Digital Entry Pass</p>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${mockBooking.id}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
+          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at the gate</p>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />
+        <p style="font-size: 12px; color: #737373; line-height: 1.6;">Your secret coordinates and structural protocols will be sent 24 hours prior to the experience. Stay tuned.</p>
+        <p style="font-size: 12px; color: #737373; margin-top: 16px;">Need assistance? Reach out at zyroninbox@gmail.com</p>
+      </div>
+    `;
+
+    const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
+    const mailInfo = await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: `[TEST E2E] Booking Confirmed: ${event.title} 🎉`,
+      html: htmlPayload,
+      replyTo: 'zyroninbox@gmail.com',
+    });
+
+    return res.json({
+      success: true,
+      message: `E2E Test completed: Mock booking created and confirmation email sent via SMTP to ${recipient}`,
+      booking: mockBooking,
+      qr_code_payload: `ZYRON-TICKET-${mockBooking.id}`,
+      qr_code_url: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${mockBooking.id}`,
+      smtp_response: {
+        messageId: mailInfo.messageId,
+        response: mailInfo.response,
+        envelope: mailInfo.envelope
+      }
+    });
+  } catch (err: any) {
+    console.error('E2E email test failed:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to execute E2E test.'
+    });
+  }
+});
+
 
 // Public Events API
 app.get('/api/events', async (req, res) => {
@@ -791,6 +938,35 @@ app.post('/api/bookings/:id/pay', requireAuth, async (req: AuthRequest, res) => 
 
     await writeDb(db);
     return res.json(booking);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Resend ticket email
+app.post('/api/bookings/:id/resend-email', requireAuth, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
+    }
+
+    if (booking.payment_status !== 'paid') {
+      return res.status(400).json({ error: 'Cannot send confirmation email for unpaid bookings.' });
+    }
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (!event) {
+      return res.status(404).json({ error: 'Associated event not found.' });
+    }
+
+    await sendConfirmationEmail(booking, event);
+    return res.json({ success: true, message: `Tickets re-sent successfully to ${booking.guest_email}!` });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
