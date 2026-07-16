@@ -21,6 +21,7 @@ interface EventDetailProps {
     guest_email: string;
     guest_phone?: string;
     guest_instagram?: string;
+    coupon_code?: string;
   }) => Promise<any>;
   setCurrentRoute: (route: string) => void;
   events: Event[];
@@ -50,6 +51,87 @@ export default function EventDetail({
   const [guestInstagram, setGuestInstagram] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [hasPrefilled, setHasPrefilled] = useState(false);
+
+  // Coupon application state
+  const [couponInput, setCouponInput] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any | null>(null);
+  const [discountCents, setDiscountCents] = useState(0);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+
+  const handleValidateCoupon = async () => {
+    if (!couponInput.trim()) return;
+    setCouponError(null);
+    setIsValidatingCoupon(true);
+
+    try {
+      const res = await apiFetch('/api/bookings/validate-coupon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: couponInput,
+          event_id: event?.id,
+          ticket_price_cents: event ? (
+            selectedTier === 'earlybird' ? event.earlybird_price_cents :
+            selectedTier === 'couple' ? event.couple_price_cents :
+            selectedTier === 'vip' ? event.vip_price_cents :
+            selectedTier === 'group' ? event.group_price_cents :
+            event.general_price_cents
+          ) : 0,
+          quantity: quantity
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to apply coupon.');
+      }
+
+      setAppliedCoupon(data.coupon);
+      setDiscountCents(data.discount_cents);
+      setCouponError(null);
+    } catch (err: any) {
+      setAppliedCoupon(null);
+      setDiscountCents(0);
+      setCouponError(err.message || 'Invalid coupon.');
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponInput('');
+    setAppliedCoupon(null);
+    setDiscountCents(0);
+    setCouponError(null);
+  };
+
+  // Recalculate discount if selected tier or quantity changes
+  useEffect(() => {
+    if (appliedCoupon && event) {
+      const currentPriceCents = 
+        selectedTier === 'earlybird' ? event.earlybird_price_cents :
+        selectedTier === 'couple' ? event.couple_price_cents :
+        selectedTier === 'vip' ? event.vip_price_cents :
+        selectedTier === 'group' ? event.group_price_cents :
+        event.general_price_cents;
+
+      const originalTotalCents = currentPriceCents * quantity;
+      let calculatedDiscount = 0;
+      if (appliedCoupon.discount_type === 'percentage') {
+        calculatedDiscount = Math.round((originalTotalCents * parseFloat(appliedCoupon.discount_value)) / 100);
+      } else {
+        calculatedDiscount = appliedCoupon.discount_value;
+      }
+
+      if (calculatedDiscount > originalTotalCents) {
+        calculatedDiscount = originalTotalCents;
+      }
+      setDiscountCents(calculatedDiscount);
+    } else {
+      setDiscountCents(0);
+    }
+  }, [selectedTier, quantity, appliedCoupon, event]);
 
   useEffect(() => {
     apiFetch('/api/config/razorpay').then(r => r.json()).then(data => {
@@ -205,6 +287,7 @@ export default function EventDetail({
         guest_email: guestEmail.trim(),
         guest_phone: guestPhone.trim(),
         guest_instagram: guestInstagram.trim(),
+        coupon_code: appliedCoupon ? appliedCoupon.code : undefined,
       });
 
       // Refetch events so tickets_sold goes up
@@ -541,6 +624,55 @@ export default function EventDetail({
                   </div>
                 </div>
 
+                {/* Coupon Code Section */}
+                <div className="space-y-3 border-t border-neutral-100 dark:border-neutral-900 pt-5">
+                  <h4 className="text-xs font-mono uppercase text-neutral-400">PROMOTIONAL CODE</h4>
+                  
+                  {appliedCoupon ? (
+                    <div className="flex items-center justify-between bg-emerald-500/10 border border-emerald-500/30 p-2.5 font-mono text-xs text-emerald-600 dark:text-emerald-400">
+                      <div>
+                        <span className="font-bold uppercase">{appliedCoupon.code}</span>
+                        <span className="ml-2 font-light">
+                          ({appliedCoupon.discount_type === 'percentage' ? `${appliedCoupon.discount_value}%` : `₹${appliedCoupon.discount_value / 100}`} off applied)
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="text-[10px] uppercase font-bold text-neutral-500 hover:text-black dark:hover:text-white cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex space-x-2">
+                        <input
+                          type="text"
+                          value={couponInput}
+                          onChange={(e) => {
+                            setCouponInput(e.target.value.toUpperCase());
+                            setCouponError(null);
+                          }}
+                          placeholder="ENTER COUPON CODE"
+                          className="flex-grow border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-xs font-mono uppercase text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-900 dark:focus:border-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleValidateCoupon}
+                          disabled={isValidatingCoupon || !couponInput.trim()}
+                          className="bg-neutral-950 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100 px-4 py-2 text-xs font-mono uppercase transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                        >
+                          {isValidatingCoupon ? 'Applying…' : 'Apply'}
+                        </button>
+                      </div>
+                      {couponError && (
+                        <p className="text-[10px] text-red-600 dark:text-red-400 font-mono">{couponError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Error Box */}
                 {errorMsg && (
                   <div className="border border-red-200 dark:border-red-900/50 bg-red-50/10 dark:bg-red-950/10 p-3 flex items-start space-x-2 text-xs text-red-600 dark:text-red-400 font-sans">
@@ -551,11 +683,25 @@ export default function EventDetail({
 
                 {/* Price Summary & Submit */}
                 <div className="border-t border-neutral-100 dark:border-neutral-900 pt-5 space-y-4">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs font-mono uppercase text-neutral-400">Total Price</span>
-                    <span className="font-serif text-2xl font-bold text-neutral-900 dark:text-white">
-                      {formatPrice(totalCents)}
-                    </span>
+                  <div className="flex flex-col space-y-1.5">
+                    {discountCents > 0 && (
+                      <div className="flex items-baseline justify-between text-xs font-mono">
+                        <span className="text-neutral-400">Original Total</span>
+                        <span className="line-through text-neutral-500">{formatPrice(totalCents)}</span>
+                      </div>
+                    )}
+                    {discountCents > 0 && (
+                      <div className="flex items-baseline justify-between text-xs font-mono text-emerald-600 dark:text-emerald-400">
+                        <span>Discount Applied</span>
+                        <span>-{formatPrice(discountCents)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-baseline justify-between border-t border-dashed border-neutral-100 dark:border-neutral-900 pt-2.5">
+                      <span className="text-xs font-mono uppercase text-neutral-400">Amount Due</span>
+                      <span className="font-serif text-2xl font-bold text-neutral-900 dark:text-white">
+                        {formatPrice(Math.max(0, totalCents - discountCents))}
+                      </span>
+                    </div>
                   </div>
 
                   <label className="flex items-start space-x-2 cursor-pointer mt-4">

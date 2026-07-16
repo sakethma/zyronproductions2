@@ -256,4 +256,132 @@ router.get('/analytics', requireAdmin, async (req: AuthRequest, res: any) => {
   }
 });
 
+// Admin coupons list
+router.get('/coupons', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    const couponsList = db.coupons || [];
+    return res.json(couponsList);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin upsert coupon
+router.post('/coupons', requireAdmin, async (req: AuthRequest, res: any) => {
+  let { id, code, discount_type, discount_value, max_uses, event_id, active } = req.body;
+
+  if (!code || !discount_type || discount_value === undefined) {
+    return res.status(400).json({ error: 'Code, Discount Type, and Discount Value are required.' });
+  }
+
+  code = code.trim().toUpperCase();
+  if (!['percentage', 'fixed'].includes(discount_type)) {
+    return res.status(400).json({ error: 'Discount Type must be percentage or fixed.' });
+  }
+
+  const val = parseFloat(discount_value);
+  if (isNaN(val) || val <= 0) {
+    return res.status(400).json({ error: 'Discount Value must be greater than 0.' });
+  }
+
+  if (discount_type === 'percentage' && val > 100) {
+    return res.status(400).json({ error: 'Percentage discount cannot exceed 100%.' });
+  }
+
+  try {
+    const db = await readDb();
+    if (!db.coupons) db.coupons = [];
+
+    const existingWithSameCode = db.coupons.find((c: any) => c.code === code && c.id !== id);
+    if (existingWithSameCode) {
+      return res.status(400).json({ error: `A coupon with code ${code} already exists.` });
+    }
+
+    let finalDiscountValue = val;
+    if (discount_type === 'fixed') {
+      finalDiscountValue = Math.round(val * 100);
+    } else {
+      finalDiscountValue = Math.round(val);
+    }
+
+    if (id) {
+      const couponIndex = db.coupons.findIndex((c: any) => c.id === id);
+      if (couponIndex === -1) {
+        return res.status(404).json({ error: 'Coupon not found to update.' });
+      }
+
+      const existing = db.coupons[couponIndex];
+      db.coupons[couponIndex] = {
+        ...existing,
+        code,
+        discount_type,
+        discount_value: finalDiscountValue,
+        max_uses: max_uses ? parseInt(max_uses) : null,
+        event_id: event_id || null,
+        active: active !== undefined ? !!active : existing.active,
+      };
+
+      await writeDb(db);
+      return res.json(db.coupons[couponIndex]);
+    } else {
+      const newCoupon = {
+        id: crypto.randomUUID(),
+        code,
+        discount_type,
+        discount_value: finalDiscountValue,
+        max_uses: max_uses ? parseInt(max_uses) : null,
+        uses: 0,
+        event_id: event_id || null,
+        active: active !== undefined ? !!active : true,
+        created_at: new Date().toISOString()
+      };
+
+      db.coupons.push(newCoupon);
+      await writeDb(db);
+      return res.json(newCoupon);
+    }
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Delete Coupon
+router.delete('/coupons/:id', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    if (!db.coupons) db.coupons = [];
+
+    const index = db.coupons.findIndex((c: any) => c.id === req.params.id);
+    if (index === -1) {
+      return res.status(404).json({ error: 'Coupon not found.' });
+    }
+
+    db.coupons.splice(index, 1);
+    await writeDb(db);
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Toggle Coupon Status
+router.post('/coupons/:id/toggle', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    if (!db.coupons) db.coupons = [];
+
+    const coupon = db.coupons.find((c: any) => c.id === req.params.id);
+    if (!coupon) {
+      return res.status(404).json({ error: 'Coupon not found.' });
+    }
+
+    coupon.active = !coupon.active;
+    await writeDb(db);
+    return res.json(coupon);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

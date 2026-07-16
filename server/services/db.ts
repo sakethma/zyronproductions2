@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { db as drizzleDb } from '../../src/db/index.ts';
-import { users, events, bookings, galleryItems, notifications } from '../../src/db/schema.ts';
+import { users, events, bookings, galleryItems, notifications, coupons } from '../../src/db/schema.ts';
 import { eq, desc, and, isNull, notInArray, sql } from 'drizzle-orm';
 
 export interface DbState {
@@ -10,6 +10,7 @@ export interface DbState {
   bookings: any[];
   gallery_items: any[];
   notifications: any[];
+  coupons: any[];
 }
 
 export async function readDb(): Promise<DbState> {
@@ -18,13 +19,15 @@ export async function readDb(): Promise<DbState> {
   const bookingsList = await drizzleDb.select().from(bookings);
   const galleryList = await drizzleDb.select().from(galleryItems);
   const notificationsList = await drizzleDb.select().from(notifications);
+  const couponsList = await drizzleDb.select().from(coupons);
   
   return {
     users: usersList.map(u => ({ ...u, id: u.uid })),
     events: eventsList,
     bookings: bookingsList,
     gallery_items: galleryList,
-    notifications: notificationsList
+    notifications: notificationsList,
+    coupons: couponsList
   };
 }
 
@@ -53,7 +56,8 @@ export async function writeDb(data: DbState) {
       events: data.events,
       bookings: data.bookings,
       gallery_items: data.gallery_items,
-      notifications: notificationsForJson
+      notifications: notificationsForJson,
+      coupons: data.coupons || []
     };
     await fs.mkdir(DB_DIR, { recursive: true });
     await fs.writeFile(DB_PATH, JSON.stringify(jsonData, null, 2), 'utf-8');
@@ -62,6 +66,14 @@ export async function writeDb(data: DbState) {
 
   // Drizzle Transactions for batch operations & performance!
   await drizzleDb.transaction(async (tx) => {
+    // 0. DELETE coupons in batch
+    const newCouponIds = (data.coupons || []).map((c: any) => c.id);
+    if (newCouponIds.length > 0) {
+      await tx.delete(coupons).where(notInArray(coupons.id, newCouponIds));
+    } else {
+      await tx.delete(coupons);
+    }
+
     // 1. DELETE bookings & gallery in batch
     const newBookingIds = data.bookings.map((b: any) => b.id);
     if (newBookingIds.length > 0) {
@@ -144,6 +156,8 @@ export async function writeDb(data: DbState) {
             checked_in: sql`EXCLUDED.checked_in`,
             checked_in_at: sql`EXCLUDED.checked_in_at`,
             cancelled_at: sql`EXCLUDED.cancelled_at`,
+            coupon_code: sql`EXCLUDED.coupon_code`,
+            discount_cents: sql`EXCLUDED.discount_cents`,
             updated_at: sql`EXCLUDED.updated_at`
           }
         });
@@ -186,6 +200,25 @@ export async function writeDb(data: DbState) {
             title: sql`EXCLUDED.title`,
             message: sql`EXCLUDED.message`,
             read: sql`EXCLUDED.read`
+          }
+        });
+    }
+
+    // 8. Batch UPSERT coupons
+    if (data.coupons && data.coupons.length > 0) {
+      await tx.insert(coupons)
+        .values(data.coupons)
+        .onConflictDoUpdate({
+          target: coupons.id,
+          set: {
+            code: sql`EXCLUDED.code`,
+            discount_type: sql`EXCLUDED.discount_type`,
+            discount_value: sql`EXCLUDED.discount_value`,
+            max_uses: sql`EXCLUDED.max_uses`,
+            uses: sql`EXCLUDED.uses`,
+            event_id: sql`EXCLUDED.event_id`,
+            active: sql`EXCLUDED.active`,
+            created_at: sql`EXCLUDED.created_at`
           }
         });
     }

@@ -51,9 +51,69 @@ router.get('/my', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
+// Validate coupon
+router.post('/validate-coupon', requireAuth, async (req: AuthRequest, res: any) => {
+  let { code, event_id, ticket_price_cents, quantity } = req.body;
+  if (!code) {
+    return res.status(400).json({ error: 'Coupon code is required.' });
+  }
+
+  code = code.trim().toUpperCase();
+  quantity = parseInt(quantity) || 1;
+
+  try {
+    const db = await readDb();
+    if (!db.coupons) db.coupons = [];
+    const coupon = db.coupons.find((c: any) => c.code === code);
+
+    if (!coupon) {
+      return res.status(404).json({ error: 'Invalid coupon code.' });
+    }
+
+    if (!coupon.active) {
+      return res.status(400).json({ error: 'This coupon is inactive.' });
+    }
+
+    if (coupon.max_uses !== null && coupon.max_uses !== undefined && coupon.uses >= coupon.max_uses) {
+      return res.status(400).json({ error: 'This coupon has reached its maximum usage limit.' });
+    }
+
+    if (coupon.event_id && coupon.event_id !== event_id) {
+      return res.status(400).json({ error: 'This coupon is not valid for this event.' });
+    }
+
+    const originalTotalCents = (ticket_price_cents || 0) * quantity;
+    let discountCents = 0;
+
+    if (coupon.discount_type === 'percentage') {
+      discountCents = Math.round((originalTotalCents * coupon.discount_value) / 100);
+    } else if (coupon.discount_type === 'fixed') {
+      discountCents = coupon.discount_value;
+    }
+
+    if (discountCents > originalTotalCents) {
+      discountCents = originalTotalCents;
+    }
+
+    return res.json({
+      valid: true,
+      coupon: {
+        id: coupon.id,
+        code: coupon.code,
+        discount_type: coupon.discount_type,
+        discount_value: coupon.discount_value
+      },
+      discount_cents: discountCents,
+      final_cents: originalTotalCents - discountCents
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Create booking
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
-  let { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram } = req.body;
+  let { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram, coupon_code } = req.body;
   event_id = typeof event_id === 'string' ? event_id.trim() : event_id;
   tier = typeof tier === 'string' ? tier.trim() : tier;
   guest_name = typeof guest_name === 'string' ? guest_name.trim() : guest_name;
@@ -94,6 +154,41 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
 
     event.tickets_sold += quantity;
 
+    let originalTotalCents = priceCents * quantity;
+    let discountCents = 0;
+    let validatedCouponCode = null;
+
+    if (coupon_code && typeof coupon_code === 'string' && coupon_code.trim()) {
+      const code = coupon_code.trim().toUpperCase();
+      if (!db.coupons) db.coupons = [];
+      const coupon = db.coupons.find((c: any) => c.code === code);
+      if (!coupon) {
+        return res.status(400).json({ error: 'Invalid coupon code.' });
+      }
+      if (!coupon.active) {
+        return res.status(400).json({ error: 'This coupon is inactive.' });
+      }
+      if (coupon.max_uses !== null && coupon.max_uses !== undefined && coupon.uses >= coupon.max_uses) {
+        return res.status(400).json({ error: 'This coupon has reached its maximum usage limit.' });
+      }
+      if (coupon.event_id && coupon.event_id !== event_id) {
+        return res.status(400).json({ error: 'This coupon is not valid for this event.' });
+      }
+
+      if (coupon.discount_type === 'percentage') {
+        discountCents = Math.round((originalTotalCents * coupon.discount_value) / 100);
+      } else if (coupon.discount_type === 'fixed') {
+        discountCents = coupon.discount_value;
+      }
+
+      if (discountCents > originalTotalCents) {
+        discountCents = originalTotalCents;
+      }
+
+      coupon.uses += 1;
+      validatedCouponCode = coupon.code;
+    }
+
     const newBooking = {
       id: crypto.randomUUID(),
       user_id: req.user.id,
@@ -104,7 +199,9 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       guest_email,
       guest_phone,
       guest_instagram: guest_instagram || '',
-      total_cents: priceCents * quantity,
+      total_cents: originalTotalCents - discountCents,
+      coupon_code: validatedCouponCode,
+      discount_cents: discountCents,
       payment_status: 'pending',
       payment_provider_ref: '',
       dietary: '',

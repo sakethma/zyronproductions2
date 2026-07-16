@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema.ts';
-import { users, events, bookings, galleryItems, notifications } from './schema.ts';
+import { users, events, bookings, galleryItems, notifications, coupons } from './schema.ts';
 import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -61,7 +61,8 @@ function ensureJsonDb() {
       events: [],
       bookings: [],
       gallery_items: [],
-      notifications: []
+      notifications: [],
+      coupons: []
     }, null, 2));
   }
 }
@@ -70,9 +71,13 @@ function readJsonDb(): any {
   ensureJsonDb();
   try {
     const data = fs.readFileSync(DB_PATH, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    if (!parsed.coupons) {
+      parsed.coupons = [];
+    }
+    return parsed;
   } catch (e) {
-    return { users: [], events: [], bookings: [], gallery_items: [], notifications: [] };
+    return { users: [], events: [], bookings: [], gallery_items: [], notifications: [], coupons: [] };
   }
 }
 
@@ -87,6 +92,7 @@ function getTableName(table: any): string {
   if (table === bookings) return 'bookings';
   if (table === galleryItems) return 'gallery_items';
   if (table === notifications) return 'notifications';
+  if (table === coupons) return 'coupons';
   return '';
 }
 

@@ -50,6 +50,8 @@ export const bookings = pgTable('bookings', {
   cancelled_at: text('cancelled_at'),
   checked_in: boolean('checked_in').notNull().default(false),
   checked_in_at: text('checked_in_at'),
+  coupon_code: text('coupon_code'),
+  discount_cents: integer('discount_cents'),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
 });
@@ -69,6 +71,18 @@ export const notifications = pgTable('notifications', {
   title: text('title').notNull(),
   message: text('message').notNull(),
   read: boolean('read').notNull().default(false),
+  created_at: text('created_at').notNull(),
+});
+
+export const coupons = pgTable('coupons', {
+  id: text('id').primaryKey(),
+  code: text('code').notNull().unique(),
+  discount_type: text('discount_type').notNull(), // 'percentage' | 'fixed'
+  discount_value: integer('discount_value').notNull(), // percent value or absolute cents value
+  max_uses: integer('max_uses'),
+  uses: integer('uses').notNull().default(0),
+  event_id: text('event_id'), // optional event constraint
+  active: boolean('active').notNull().default(true),
   created_at: text('created_at').notNull(),
 });
 

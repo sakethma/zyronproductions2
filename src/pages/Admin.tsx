@@ -17,7 +17,7 @@ interface AdminProps {
   setCurrentRoute: (route: string) => void;
 }
 
-type AdminTab = 'analytics' | 'events' | 'guests' | 'gallery' | 'diagnostics';
+type AdminTab = 'analytics' | 'events' | 'guests' | 'gallery' | 'coupons' | 'diagnostics';
 
 export default function Admin({
   user,
@@ -82,6 +82,114 @@ export default function Admin({
       return () => clearInterval(interval);
     }
   }, [activeTab]);
+
+  // ----------------- TAB: COUPONS WORKSPACE -----------------
+  const [couponsList, setCouponsList] = useState<any[]>([]);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+
+  // Coupon form state
+  const [couponId, setCouponId] = useState('');
+  const [couponCode, setCouponCode] = useState('');
+  const [discountType, setDiscountType] = useState<'percentage' | 'fixed'>('percentage');
+  const [discountValue, setDiscountValue] = useState('');
+  const [maxUses, setMaxUses] = useState('');
+  const [couponEventId, setCouponEventId] = useState('');
+
+  const fetchCoupons = () => {
+    setLoadingCoupons(true);
+    apiFetch('/api/admin/coupons')
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then((data) => {
+        setCouponsList(data);
+        setLoadingCoupons(false);
+      })
+      .catch(() => {
+        setLoadingCoupons(false);
+        triggerToast('Could not load coupon parameters.');
+      });
+  };
+
+  useEffect(() => {
+    if (activeTab === 'coupons') {
+      fetchCoupons();
+    }
+  }, [activeTab]);
+
+  const handleSaveCoupon = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!couponCode.trim() || !discountValue) {
+      triggerToast('All mandatory fields must be completed.');
+      return;
+    }
+
+    const payload = {
+      id: couponId || undefined,
+      code: couponCode,
+      discount_type: discountType,
+      discount_value: discountValue,
+      max_uses: maxUses ? parseInt(maxUses) : null,
+      event_id: couponEventId || null,
+    };
+
+    apiFetch('/api/admin/coupons', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to save coupon.');
+        }
+        triggerToast('Coupon specification registered successfully.');
+        setCouponId('');
+        setCouponCode('');
+        setDiscountType('percentage');
+        setDiscountValue('');
+        setMaxUses('');
+        setCouponEventId('');
+        fetchCoupons();
+      })
+      .catch((err) => {
+        triggerToast(err.message || 'Could not serialize coupon records.');
+      });
+  };
+
+  const handleToggleCoupon = (id: string) => {
+    apiFetch(`/api/admin/coupons/${id}/toggle`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        triggerToast('Coupon status altered.');
+        fetchCoupons();
+      })
+      .catch(() => {
+        triggerToast('Failed to modify coupon status.');
+      });
+  };
+
+  const handleDeleteCoupon = (id: string) => {
+    if (!window.confirm('Delete coupon specification permanently? This cannot be undone.')) return;
+    apiFetch(`/api/admin/coupons/${id}`, { method: 'DELETE' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error();
+        triggerToast('Coupon expunged.');
+        fetchCoupons();
+      })
+      .catch(() => {
+        triggerToast('Could not expunge coupon specification.');
+      });
+  };
+
+  const handleEditCouponClick = (c: any) => {
+    setCouponId(c.id);
+    setCouponCode(c.code);
+    setDiscountType(c.discount_type);
+    setDiscountValue(c.discount_type === 'fixed' ? (c.discount_value / 100).toString() : c.discount_value.toString());
+    setMaxUses(c.max_uses ? c.max_uses.toString() : '');
+    setCouponEventId(c.event_id || '');
+  };
 
   // ----------------- TAB 2: EVENTS WORKSPACE -----------------
   const [adminEvents, setAdminEvents] = useState<Event[]>([]);
@@ -566,6 +674,7 @@ export default function Admin({
             { id: 'events', label: 'Events', icon: CalendarDays },
             { id: 'guests', label: 'Guests', icon: Users2 },
             { id: 'gallery', label: 'Gallery', icon: ImageIcon },
+            { id: 'coupons', label: 'Coupons', icon: Ticket },
             { id: 'diagnostics', label: 'SMTP & QR Test', icon: Mail },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -1352,6 +1461,210 @@ export default function Admin({
                     )}
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+
+      {/* -------------------- TAB: COUPON MANAGEMENT -------------------- */}
+      {activeTab === 'coupons' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-fade-in">
+          
+          {/* Left Form: Create or Edit Coupon */}
+          <div className="lg:col-span-4 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6 h-fit">
+            <div className="space-y-1">
+              <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white">
+                {couponId ? 'Edit specification' : 'Register coupon'}
+              </h3>
+              <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">
+                {couponId ? 'Modify coupon attributes' : 'Establish promotional codes'}
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveCoupon} className="space-y-4 font-sans text-xs">
+              
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">COUPON CODE *</label>
+                <input
+                  type="text"
+                  required
+                  value={couponCode}
+                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. ZYRON30, METADISCOUNT"
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono uppercase"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">DISCOUNT TYPE *</label>
+                <select
+                  required
+                  value={discountType}
+                  onChange={(e) => setDiscountType(e.target.value as 'percentage' | 'fixed')}
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                >
+                  <option value="percentage">Percentage Off (%)</option>
+                  <option value="fixed">Fixed Off (₹)</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">
+                  {discountType === 'percentage' ? 'DISCOUNT PERCENTAGE *' : 'DISCOUNT AMOUNT (₹) *'}
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0.01"
+                  step="any"
+                  value={discountValue}
+                  onChange={(e) => setDiscountValue(e.target.value)}
+                  placeholder={discountType === 'percentage' ? 'e.g. 15 (for 15%)' : 'e.g. 500 (for ₹500 off)'}
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">MAXIMUM USAGES (OPTIONAL)</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={maxUses}
+                  onChange={(e) => setMaxUses(e.target.value)}
+                  placeholder="e.g. 100 (leave blank for unlimited)"
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">EXPERIENCE BINDING (OPTIONAL)</label>
+                <select
+                  value={couponEventId}
+                  onChange={(e) => setCouponEventId(e.target.value)}
+                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                >
+                  <option value="">Apply to all experiences</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.title} ({formatDate(ev.event_date)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex space-x-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-neutral-950 hover:bg-neutral-800 text-white dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-100 border border-transparent py-3 text-xs font-mono uppercase tracking-widest transition-colors cursor-pointer"
+                >
+                  {couponId ? 'Save Changes' : 'Establish'}
+                </button>
+                {couponId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCouponId('');
+                      setCouponCode('');
+                      setDiscountType('percentage');
+                      setDiscountValue('');
+                      setMaxUses('');
+                      setCouponEventId('');
+                    }}
+                    className="border border-neutral-200 dark:border-neutral-800 px-4 py-3 text-xs font-mono uppercase text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+
+            </form>
+          </div>
+
+          {/* Right ledger grid: lists active coupons */}
+          <div className="lg:col-span-8 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6">
+            <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white">Active Promotional Ledger</h3>
+            
+            {loadingCoupons ? (
+              <div className="h-24 flex items-center justify-center font-mono text-xs text-neutral-400">
+                <RefreshCw className="h-5 w-5 animate-spin mr-2" />
+                <span>Resolving promotional indexes...</span>
+              </div>
+            ) : couponsList.length === 0 ? (
+              <p className="text-xs text-neutral-400 font-mono text-center py-8">Promotional ledger is currently empty.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs font-mono">
+                  <thead className="border-b border-neutral-100 dark:border-neutral-900 text-neutral-400">
+                    <tr>
+                      <th className="py-3 font-normal">CODE</th>
+                      <th className="py-3 font-normal">DISCOUNT RATE</th>
+                      <th className="py-3 font-normal">LIFETIME USAGES</th>
+                      <th className="py-3 font-normal">SCOPE BINDING</th>
+                      <th className="py-3 font-normal text-center">STATUS</th>
+                      <th className="py-3 font-normal text-right">ACTIONS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100 dark:divide-neutral-900">
+                    {couponsList.map((c) => {
+                      const boundEvent = events.find((ev) => ev.id === c.event_id);
+                      return (
+                        <tr key={c.id} className="text-neutral-800 dark:text-neutral-200">
+                          <td className="py-4">
+                            <span className="font-bold text-neutral-950 dark:text-white bg-neutral-100 dark:bg-neutral-900 px-2 py-1 text-xs select-all">
+                              {c.code}
+                            </span>
+                          </td>
+                          <td className="py-4 font-bold">
+                            {c.discount_type === 'percentage' ? `${c.discount_value}% Off` : `₹${(c.discount_value / 100).toLocaleString()} Off`}
+                          </td>
+                          <td className="py-4">
+                            <span>{c.uses}</span>
+                            <span className="text-neutral-400 font-light"> / {c.max_uses !== null && c.max_uses !== undefined ? c.max_uses : '∞'}</span>
+                          </td>
+                          <td className="py-4 max-w-[150px] truncate" title={boundEvent ? boundEvent.title : 'All Experiences'}>
+                            {boundEvent ? (
+                              <span className="text-violet-600 dark:text-violet-400">{boundEvent.title}</span>
+                            ) : (
+                              <span className="text-neutral-400 font-light">All experiences</span>
+                            )}
+                          </td>
+                          <td className="py-4 text-center">
+                            <button
+                              onClick={() => handleToggleCoupon(c.id)}
+                              className={`px-2 py-1 text-[9px] uppercase tracking-wider border cursor-pointer font-bold transition-all ${
+                                c.active
+                                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-600'
+                                  : 'border-neutral-300 text-neutral-400 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40'
+                              }`}
+                            >
+                              {c.active ? 'Active' : 'Inactive'}
+                            </button>
+                          </td>
+                          <td className="py-4 text-right">
+                            <div className="flex items-center justify-end space-x-1">
+                              <button
+                                onClick={() => handleEditCouponClick(c)}
+                                className="p-1.5 border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
+                                title="Edit specifications"
+                              >
+                                <Edit className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCoupon(c.id)}
+                                className="p-1.5 border border-red-200 hover:bg-red-50/10 text-red-600 transition-colors cursor-pointer"
+                                title="Expunge coupon specification"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
