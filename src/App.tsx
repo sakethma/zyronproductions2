@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, useLocation, useParams, useSearchParams } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import { apiFetch } from './lib/api';
@@ -22,22 +23,62 @@ import Preloader from './components/Preloader';
 
 import { Event, User, TicketTier } from './types';
 
+// Route wrappers to convert React Router params into old props
+function EventDetailWrapper({ user, onBook, setCurrentRoute, events, refetchEvents }: any) {
+  const { slug } = useParams();
+  return (
+    <EventDetail
+      slug={slug || ''}
+      user={user}
+      onBook={onBook}
+      setCurrentRoute={setCurrentRoute}
+      events={events}
+      refetchEvents={refetchEvents}
+    />
+  );
+}
+
+function AuthWrapper({ onSignInSuccess, setCurrentRoute }: any) {
+  const [searchParams] = useSearchParams();
+  const redirect = searchParams.get('redirect') || '/';
+  return (
+    <Auth
+      onSignInSuccess={onSignInSuccess}
+      setCurrentRoute={setCurrentRoute}
+      redirectUrl={redirect}
+    />
+  );
+}
+
+function BookingSuccessWrapper({ setCurrentRoute }: any) {
+  const [searchParams] = useSearchParams();
+  const bookingId = searchParams.get('bookingId') || '';
+  return (
+    <BookingSuccess
+      bookingId={bookingId}
+      setCurrentRoute={setCurrentRoute}
+    />
+  );
+}
+
 export default function App() {
-  const [currentRoute, setCurrentRoute] = useState<string>('/');
+  const location = useLocation();
+  const currentRoute = location.pathname + location.search;
+  const navigate = useNavigate();
+  const setCurrentRoute = (route: string) => {
+    navigate(route);
+  };
+
   const [selectedEventSlug, setSelectedEventSlug] = useState<string>('');
   const [user, setUser] = useState<User | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [darkMode, setDarkMode] = useState<boolean>(true); // default to a high-end twilight dark theme!
 
-  // Toggle Dark Mode
+  // Force dark mode class and prevent white theme
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  }, [darkMode]);
+    document.documentElement.classList.add('dark');
+  }, []);
 
   // Check Current Session Auth on Mount
   useEffect(() => {
@@ -148,109 +189,100 @@ export default function App() {
     return data;
   };
 
-  // State Routing Engine
-  const parseRoute = (route: string) => {
-    if (route.startsWith('/events/')) {
-      const slug = route.substring(8).split('?')[0];
-      return { base: '/events/:slug', slug };
-    }
-    if (route.startsWith('/booking-success')) {
-      const url = new URL(route, window.location.origin);
-      const bookingId = url.searchParams.get('bookingId') || '';
-      return { base: '/booking-success', bookingId };
-    }
-    if (route.startsWith('/auth')) {
-      const url = new URL(route, window.location.origin);
-      const redirect = url.searchParams.get('redirect') || '/';
-      return { base: '/auth', redirect };
-    }
-    return { base: route };
-  };
-
-  const routeInfo = parseRoute(currentRoute);
-
   const renderActivePage = () => {
-    switch (routeInfo.base) {
-      case '/':
-        return (
-          <Home
-            events={events}
-            isLoading={isLoadingEvents}
-            setCurrentRoute={setCurrentRoute}
-            setSelectedEventSlug={setSelectedEventSlug}
-          />
-        );
-      case '/events':
-        return (
-          <Events
-            events={events}
-            isLoading={isLoadingEvents}
-            setCurrentRoute={setCurrentRoute}
-            setSelectedEventSlug={setSelectedEventSlug}
-          />
-        );
-      case '/events/:slug':
-        return (
-          <EventDetail
-            slug={routeInfo.slug || selectedEventSlug}
-            user={user}
-            onBook={handleBookTicket}
-            setCurrentRoute={setCurrentRoute}
-            events={events}
-            refetchEvents={fetchEvents}
-          />
-        );
-      case '/gallery':
-        return <Gallery />;
-      case '/story':
-        return <Story />;
-      case '/auth':
-        return (
-          <Auth
-            onSignInSuccess={(u) => setUser(u)}
-            setCurrentRoute={setCurrentRoute}
-            redirectUrl={routeInfo.redirect}
-          />
-        );
-      case '/my-bookings':
-        return (
-          <MyBookings
-            setCurrentRoute={setCurrentRoute}
-            setSelectedEventSlug={setSelectedEventSlug}
-          />
-        );
-      case '/booking-success':
-        return (
-          <BookingSuccess
-            bookingId={routeInfo.bookingId || ''}
-            setCurrentRoute={setCurrentRoute}
-          />
-        );
-      case '/admin':
-        return (
-          <Admin
-            user={user}
-            events={events}
-            refetchEvents={fetchEvents}
-            setCurrentRoute={setCurrentRoute}
-          />
-        );
-      default:
-        // 404 page
-        return (
-          <div className="mx-auto max-w-md py-24 px-4 text-center">
-            <h1 className="font-serif text-8xl font-bold tracking-tight text-neutral-900 dark:text-white leading-none mb-4">404</h1>
-            <p className="text-base text-neutral-500 mb-8 font-light">The coordinates you entered do not exist on our map.</p>
-            <button
-              id="btn-error-redirect"
-              onClick={() => setCurrentRoute('/')}
-              className="border border-neutral-950 dark:border-white text-neutral-950 dark:text-white px-6 py-2.5 text-xs font-mono tracking-widest uppercase hover:bg-neutral-950 hover:text-white dark:hover:bg-white dark:hover:text-neutral-950 transition-all cursor-pointer"
-            >
-              Return Home
-            </button>
-          </div>
-        );
-    }
+    return (
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <Home
+              events={events}
+              isLoading={isLoadingEvents}
+              setCurrentRoute={setCurrentRoute}
+              setSelectedEventSlug={setSelectedEventSlug}
+            />
+          }
+        />
+        <Route
+          path="/events"
+          element={
+            <Events
+              events={events}
+              isLoading={isLoadingEvents}
+              setCurrentRoute={setCurrentRoute}
+              setSelectedEventSlug={setSelectedEventSlug}
+            />
+          }
+        />
+        <Route
+          path="/events/:slug"
+          element={
+            <EventDetailWrapper
+              user={user}
+              onBook={handleBookTicket}
+              setCurrentRoute={setCurrentRoute}
+              events={events}
+              refetchEvents={fetchEvents}
+            />
+          }
+        />
+        <Route path="/gallery" element={<Gallery />} />
+        <Route path="/story" element={<Story />} />
+        <Route
+          path="/auth"
+          element={
+            <AuthWrapper
+              onSignInSuccess={(u: any) => setUser(u)}
+              setCurrentRoute={setCurrentRoute}
+            />
+          }
+        />
+        <Route
+          path="/my-bookings"
+          element={
+            <MyBookings
+              setCurrentRoute={setCurrentRoute}
+              setSelectedEventSlug={setSelectedEventSlug}
+            />
+          }
+        />
+        <Route
+          path="/booking-success"
+          element={
+            <BookingSuccessWrapper
+              setCurrentRoute={setCurrentRoute}
+            />
+          }
+        />
+        <Route
+          path="/admin"
+          element={
+            <Admin
+              user={user}
+              events={events}
+              refetchEvents={fetchEvents}
+              setCurrentRoute={setCurrentRoute}
+            />
+          }
+        />
+        <Route
+          path="*"
+          element={
+            <div className="mx-auto max-w-md py-24 px-4 text-center animate-fade-in">
+              <h1 className="font-serif text-8xl font-bold tracking-tight text-neutral-900 dark:text-white leading-none mb-4">404</h1>
+              <p className="text-base text-neutral-500 mb-8 font-light">The coordinates you entered do not exist on our map.</p>
+              <button
+                id="btn-error-redirect"
+                onClick={() => setCurrentRoute('/')}
+                className="border border-neutral-950 dark:border-white text-neutral-950 dark:text-white px-6 py-2.5 text-xs font-mono tracking-widest uppercase hover:bg-neutral-950 hover:text-white dark:hover:bg-white dark:hover:text-neutral-950 transition-all cursor-pointer animate-pulse"
+              >
+                Return Home
+              </button>
+            </div>
+          }
+        />
+      </Routes>
+    );
   };
 
   return (

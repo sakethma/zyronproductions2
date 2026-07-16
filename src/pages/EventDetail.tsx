@@ -8,6 +8,8 @@ import { motion } from 'motion/react';
 import { Calendar, MapPin, Ticket, ShieldCheck, AlertCircle, Users, ArrowLeft } from 'lucide-react';
 import { Event, TicketTier, User } from '../types';
 import { apiFetch } from '../lib/api';
+import { EventDetailSkeleton } from '../components/Skeleton';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 interface EventDetailProps {
   slug: string;
@@ -110,13 +112,7 @@ export default function EventDetail({
   }, [event, user, hasPrefilled]);
 
   if (isLoading) {
-    return (
-      <div className="mx-auto max-w-4xl py-24 px-4 text-center">
-        <div className="h-10 w-48 bg-neutral-100 dark:bg-neutral-900 mx-auto animate-pulse mb-8"></div>
-        <div className="h-64 bg-neutral-100 dark:bg-neutral-900 animate-pulse mb-8"></div>
-        <div className="h-6 w-full bg-neutral-100 dark:bg-neutral-900 animate-pulse"></div>
-      </div>
-    );
+    return <EventDetailSkeleton />;
   }
 
   if (!event || event.status !== 'published') {
@@ -597,6 +593,7 @@ export default function EventDetail({
 
       </div>
 
+      <LoadingOverlay isVisible={submitting} />
     </div>
   );
 }

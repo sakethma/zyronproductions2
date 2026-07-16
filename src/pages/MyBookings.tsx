@@ -8,6 +8,8 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Calendar, MapPin, Ticket, ShieldAlert, CheckCircle, Edit, Trash2, XCircle, HeartHandshake, Utensils, Accessibility, AlertCircle } from 'lucide-react';
 import { Booking, PaymentStatus } from '../types';
 import { apiFetch } from '../lib/api';
+import { BookingCardSkeleton } from '../components/Skeleton';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 interface MyBookingsProps {
   setCurrentRoute: (route: string) => void;
@@ -38,6 +40,7 @@ export default function MyBookings({
   const [submittingCancel, setSubmittingCancel] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [submittingResendId, setSubmittingResendId] = useState<string | null>(null);
+  const [submittingPayment, setSubmittingPayment] = useState(false);
 
   const handleResendEmail = async (bookingId: string) => {
     setSubmittingResendId(bookingId);
@@ -128,9 +131,11 @@ export default function MyBookings({
       return;
     }
     
+    setSubmittingPayment(true);
     const res = await loadRazorpayScript();
     if (!res) {
       triggerToast('Failed to load Razorpay SDK. Check your connection.');
+      setSubmittingPayment(false);
       return;
     }
 
@@ -140,6 +145,7 @@ export default function MyBookings({
       console.log("Order data received:", orderData);
       if (orderData.error) {
         triggerToast(orderData.error);
+        setSubmittingPayment(false);
         return;
       }
 
@@ -151,6 +157,7 @@ export default function MyBookings({
         description: `Booking for ${payingBooking.event_title || 'Event'}`,
         order_id: orderData.orderId,
         handler: async function (response: any) {
+          setSubmittingPayment(true);
           try {
             const verifyRes = await apiFetch(`/api/bookings/${payingBooking.id}/verify-razorpay`, {
               method: 'POST',
@@ -171,6 +178,8 @@ export default function MyBookings({
             }
           } catch (e) {
             triggerToast('Payment verification failed.');
+          } finally {
+            setSubmittingPayment(false);
           }
         },
         prefill: {
@@ -188,15 +197,18 @@ export default function MyBookings({
         console.error("Payment failed", response);
         triggerToast(response.error.description || 'Payment failed.');
       });
+      setSubmittingPayment(false);
       rzp.open();
     } catch (err: any) {
       console.error("Error initializing razorpay", err);
       triggerToast('Failed to initialize Razorpay checkout: ' + err.message);
+      setSubmittingPayment(false);
     }
   };
 
   const handleSimulatedPayment = async () => {
     if (!payingBooking) return;
+    setSubmittingPayment(true);
     try {
       const response = await apiFetch(`/api/bookings/${payingBooking.id}/pay`, {
         method: 'POST',
@@ -211,6 +223,8 @@ export default function MyBookings({
       fetchBookings();
     } catch (err) {
       triggerToast('Simulated payment failed.');
+    } finally {
+      setSubmittingPayment(false);
     }
   };
 
@@ -311,10 +325,7 @@ export default function MyBookings({
       {isLoading ? (
         <div className="space-y-6">
           {[1, 2].map((n) => (
-            <div key={n} className="border border-neutral-200 dark:border-neutral-900 p-6 space-y-4">
-              <div className="h-6 w-1/4 bg-neutral-100 dark:bg-neutral-900 animate-pulse"></div>
-              <div className="h-20 w-full bg-neutral-100 dark:bg-neutral-900 animate-pulse"></div>
-            </div>
+            <BookingCardSkeleton key={n} />
           ))}
         </div>
       ) : bookings.length === 0 ? (
@@ -725,6 +736,7 @@ export default function MyBookings({
         </div>
       )}
 
+      <LoadingOverlay isVisible={submittingPayment} />
     </div>
   );
 }

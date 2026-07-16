@@ -95,16 +95,6 @@ export default function Header({
             <Instagram className="h-5 w-5" />
           </a>
 
-          {/* Theme Toggle */}
-          <button
-            id="theme-toggle-btn"
-            onClick={() => setDarkMode(!darkMode)}
-            className="rounded p-2 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-900 dark:text-neutral-500 dark:hover:bg-neutral-900 dark:hover:text-white transition-all-150 cursor-pointer"
-            aria-label="Toggle theme"
-          >
-            {darkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-
           {/* Auth Button */}
           {user ? (
             <div className="flex items-center space-x-3 pl-2 border-l border-neutral-200 dark:border-neutral-800">
@@ -133,16 +123,6 @@ export default function Header({
 
         {/* Mobile Menu Button */}
         <div className="flex md:hidden items-center space-x-2">
-          {/* Theme Toggle Mobile */}
-          <button
-            id="theme-toggle-mobile"
-            onClick={() => setDarkMode(!darkMode)}
-            className="rounded p-2 text-neutral-400 hover:text-neutral-900 dark:text-neutral-500 dark:hover:text-white cursor-pointer"
-            aria-label="Toggle theme"
-          >
-            {darkMode ? <Sun className="h-4.5 w-4.5" /> : <Moon className="h-4.5 w-4.5" />}
-          </button>
-
           <button
             id="mobile-menu-toggle"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
