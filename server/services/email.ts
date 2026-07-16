@@ -30,7 +30,16 @@ export interface SendMailResult {
   error?: string;
 }
 
-export async function sendMailViaBrevoApi({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }): Promise<SendMailResult> {
+export interface SendMailParams {
+  to: string | { email: string; name?: string }[];
+  subject: string;
+  html?: string;
+  htmlContent?: string;
+  text?: string;
+  textContent?: string;
+}
+
+export async function sendMailViaBrevoApi({ to, subject, html, htmlContent, text, textContent }: SendMailParams): Promise<SendMailResult> {
   if (!brevoApiKey) {
     throw new Error('Brevo API key is not configured.');
   }
@@ -38,7 +47,19 @@ export async function sendMailViaBrevoApi({ to, subject, html, text }: { to: str
   const fromStr = cleanEnvVar(process.env.SMTP_FROM) || 'Zyron Productions <onboarding@brevo.com>';
   const parsedFrom = parseFromAddress(fromStr);
 
-  console.log(`[Email] Attempting dispatch via Brevo REST API to: ${to}`);
+  // Normalize recipient (to) from either string or array
+  let formattedTo: { email: string; name?: string }[] = [];
+  if (typeof to === 'string') {
+    formattedTo = [{ email: to }];
+  } else if (Array.isArray(to)) {
+    formattedTo = to;
+  }
+
+  // Normalize HTML and Text content keys
+  const finalHtml = htmlContent || html || '';
+  const finalTxt = textContent || text || '';
+
+  console.log(`[Email] Attempting dispatch via Brevo REST API to:`, JSON.stringify(formattedTo));
 
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
@@ -52,10 +73,10 @@ export async function sendMailViaBrevoApi({ to, subject, html, text }: { to: str
         name: parsedFrom.name,
         email: parsedFrom.email
       },
-      to: [{ email: to }],
+      to: formattedTo,
       subject: subject,
-      htmlContent: html || text || '',
-      textContent: text || '',
+      htmlContent: finalHtml,
+      textContent: finalTxt || undefined,
     }),
   });
 
@@ -69,18 +90,18 @@ export async function sendMailViaBrevoApi({ to, subject, html, text }: { to: str
   return { success: true, service: 'Brevo REST API', id: data.messageId };
 }
 
-export async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }): Promise<SendMailResult> {
+export async function sendMail({ to, subject, html, htmlContent, text, textContent }: SendMailParams): Promise<SendMailResult> {
   if (brevoApiKey) {
     try {
-      return await sendMailViaBrevoApi({ to, subject, html, text });
+      return await sendMailViaBrevoApi({ to, subject, html, htmlContent, text, textContent });
     } catch (brevoErr: any) {
       console.error('Brevo REST API dispatch failed:', brevoErr);
       return { success: false, error: brevoErr.message || 'Brevo API sending failed' };
     }
   }
 
-  console.log(`[EMAIL NOT SENT - NO BREVO CONFIG] To: ${to}, Subject: ${subject}`);
-  if (text) console.log(`[TEXT]: ${text}`);
+  console.log(`[EMAIL NOT SENT - NO BREVO CONFIG] To: ${JSON.stringify(to)}, Subject: ${subject}`);
+  if (text || textContent) console.log(`[TEXT]: ${text || textContent}`);
   return { success: false, error: 'Brevo REST API is not configured. Please define BREVO_API_KEY environment variable.' };
 }
 
