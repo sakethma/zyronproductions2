@@ -160,8 +160,8 @@ export default function EventDetail({
     e.preventDefault();
     setErrorMsg(null);
 
-    if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim()) {
-      setErrorMsg('Full Name, Email Address, and Phone Number are required.');
+    if (!guestName.trim() || !guestEmail.trim() || !guestPhone.trim() || !guestInstagram.trim()) {
+      setErrorMsg('Full Name, Email Address, Phone Number, and Instagram Handle are required.');
       return;
     }
 
@@ -519,10 +519,11 @@ export default function EventDetail({
                     </div>
                     
                     <div className="space-y-1">
-                      <label id="label-instagram" className="text-[11px] font-mono text-neutral-400 uppercase">INSTAGRAM (OPTIONAL)</label>
+                      <label id="label-instagram" className="text-[11px] font-mono text-neutral-400 uppercase">INSTAGRAM *</label>
                       <input
                         id="input-instagram"
                         type="text"
+                        required
                         value={guestInstagram}
                         onChange={(e) => setGuestInstagram(e.target.value)}
                         placeholder="@username"

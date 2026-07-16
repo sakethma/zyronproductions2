@@ -11,50 +11,134 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { createServer as createViteServer } from 'vite';
 import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
 // Load environment variables
 dotenv.config();
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
+const RESEND_FROM = 'Zyron Productions <onboarding@resend.dev>';
+
+// Nodemailer SMTP Transporter setup
+const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+const smtpUser = process.env.SMTP_USER;
+const smtpPass = process.env.SMTP_PASS;
+
+let transporter: nodemailer.Transporter | null = null;
+if (smtpUser && smtpPass) {
+  transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  });
+  console.log(`Nodemailer SMTP Transporter configured for user: ${smtpUser}`);
+  
+  // Verify SMTP connection on startup
+  transporter.verify((error) => {
+    if (error) {
+      console.error('❌ Nodemailer SMTP Transporter Verification FAILED:', error.message);
+      console.error('👉 Tip: Ensure you are using a Gmail App Password, NOT your regular Google account password.');
+    } else {
+      console.log('✅ Nodemailer SMTP Transporter is successfully verified and ready to send emails!');
+    }
+  });
+} else {
+  console.log('Nodemailer SMTP variables (SMTP_USER/SMTP_PASS) are not set. SMTP is not active.');
+}
+
+async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }) {
+  // 1. Try Gmail SMTP first if configured
+  if (transporter) {
+    const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
+    try {
+      const info = await transporter.sendMail({
+        from,
+        to,
+        subject,
+        html,
+        text,
+        replyTo: 'zyroninbox@gmail.com',
+      });
+      console.log('Email sent successfully via Gmail SMTP. MessageID:', info.messageId);
+      return { success: true, service: 'SMTP', id: info.messageId };
+    } catch (err: any) {
+      console.error('SMTP sending failed:', err);
+    }
+  }
+
+  // 2. Try Resend if SMTP is not configured or failed, and Resend is configured
+  if (resend) {
+    try {
+      const { data, error } = await resend.emails.send({
+        from: RESEND_FROM,
+        replyTo: 'zyroninbox@gmail.com',
+        to,
+        subject,
+        html: html || text,
+        text: text
+      });
+      if (error) {
+        console.error('Resend email failed:', error);
+        return { success: false, error: error.message };
+      }
+      console.log('Email sent successfully via Resend. Email ID:', data?.id);
+      return { success: true, service: 'Resend', id: data?.id };
+    } catch (err: any) {
+      console.error('Resend email failed due to exception:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  console.log(`[EMAIL NOT SENT - NO CONFIG] To: ${to}, Subject: ${subject}`);
+  if (text) console.log(`[TEXT]: ${text}`);
+  return { success: false, error: 'No email service (SMTP or Resend) is configured.' };
+}
 
 async function sendConfirmationEmail(booking: any, event: any) {
-  if (!resend) {
-    console.log('Resend is not initialized. Please set RESEND_API_KEY environment variable.');
-    return;
-  }
   try {
-    const { data, error } = await resend.emails.send({
-      from: 'Zyron Productions <onboarding@resend.dev>',
-      replyTo: 'zyroninbox@gmail.com',
-      to: booking.guest_email,
-      subject: `Booking Confirmed: ${event.title}`,
-      html: `
-        <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
-          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; color: #7c3aed;">Zyron Productions - Admission Confirmed</h2>
-          <p>Booking Reference: <strong>${booking.id.split('-')[0].toUpperCase()}</strong></p>
-          <p>Event: <strong>${event.title}</strong></p>
-          <p>Guest: <strong>${booking.guest_name}</strong></p>
-          <p>Phone: <strong>${booking.guest_phone || 'N/A'}</strong></p>
-          ${booking.guest_instagram ? `<p>Instagram: <strong>${booking.guest_instagram}</strong></p>` : ''}
-          <p>Passes: <strong>${booking.quantity}x ${booking.tier.toUpperCase()}</strong></p>
-          <div style="text-align: center; margin: 24px 0;">
-            <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${booking.id}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
-            <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission</p>
-          </div>
-          <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
-          <p style="font-size: 12px; color: #737373;">Your secret coordinates and structural protocols will be sent 24 hours prior to the experience.</p>
-          <p style="font-size: 12px; color: #737373;">Need assistance? Contact us at zyroninbox@gmail.com</p>
+    const html = `
+      <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+        <h1 style="color: #7c3aed; text-align: center; margin-bottom: 24px; font-family: serif;">Congratulations! 🎉</h1>
+        <p style="font-size: 16px; text-align: center; margin-bottom: 32px; font-weight: bold;">Your spot at ${event.title} is officially secured.</p>
+        
+        <div style="background-color: white; padding: 20px; border: 1px solid #e5e5e5; margin-bottom: 24px;">
+          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; font-size: 14px; margin-top: 0; color: #737373;">Admission Details</h2>
+          <p style="margin: 8px 0;">Booking Ref: <strong style="color: #7c3aed;">${booking.id.split('-')[0].toUpperCase()}</strong></p>
+          <p style="margin: 8px 0;">Event: <strong>${event.title}</strong></p>
+          <p style="margin: 8px 0;">Guest: <strong>${booking.guest_name}</strong></p>
+          <p style="margin: 8px 0;">Passes: <strong>${booking.quantity}x ${booking.tier.toUpperCase()}</strong></p>
         </div>
-      `
+
+        <div style="text-align: center; margin: 32px 0;">
+          <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Digital Entry Pass</p>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${booking.id}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
+          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at the gate</p>
+        </div>
+
+        <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />
+        <p style="font-size: 12px; color: #737373; line-height: 1.6;">Your secret coordinates and structural protocols will be sent 24 hours prior to the experience. Stay tuned.</p>
+        <p style="font-size: 12px; color: #737373; margin-top: 16px;">Need assistance? Reach out at zyroninbox@gmail.com</p>
+      </div>
+    `;
+
+    const result = await sendMail({
+      to: booking.guest_email,
+      subject: `Booking Confirmed: ${event.title} 🎉`,
+      html
     });
 
-    if (error) {
-      console.error('Resend API returned an error:', error);
-      if (error.name === 'validation_error' || error.message?.toLowerCase().includes('restriction') || error.message?.toLowerCase().includes('onboarding') || error.message?.toLowerCase().includes('authorized')) {
-        console.warn(`Resend restriction warning: Using 'onboarding@resend.dev' limits recipients to the Resend account owner. If ${booking.guest_email} is not the owner email, this send will be blocked. To resolve, add a verified domain to Resend or send to your registered email.`);
-      }
+    if (result.success) {
+      console.log(`Confirmation email sent successfully via ${result.service}. ID: ${result.id}`);
     } else {
-      console.log('Confirmation email sent successfully via Resend. Email ID:', data?.id);
+      console.warn('Confirmation email sending failed:', result.error);
     }
   } catch (err) {
     console.error('Failed to send confirmation email due to exception:', err);
@@ -201,7 +285,12 @@ async function initDb() {
       await migrate(drizzleDb, { migrationsFolder: './drizzle' });
       console.log('Database migrations completed successfully!');
     } catch (err: any) {
-      console.error('Failed to run database migrations:', err);
+      const errMsg = err.message || '';
+      if (errMsg.includes('permission denied') || errMsg.includes('CREATE SCHEMA')) {
+        console.log('Note: Database schema is managed by the platform. Skipping local migration metadata table creation.');
+      } else {
+        console.log('Database migrator notice:', errMsg || err);
+      }
     }
   }
 }
@@ -317,31 +406,24 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     
     let emailSent = false;
     let emailErrorMsg = '';
-    if (resend) {
-      try {
-        const result = await resend.emails.send({
-          from: 'Zyron Productions <onboarding@resend.dev>',
-          to: normalizedEmail,
-          subject: 'Your Zyron Productions Reset Code',
-          text: `Your password reset code is: ${code}\n\nThis code is valid for 15 minutes. Use it to securely reset your password.`
-        });
-        if (result.error) {
-          console.error('Resend API failed with error during password reset:', result.error);
-          emailErrorMsg = result.error.message || 'Validation/Delivery error';
-        } else {
-          emailSent = true;
-        }
-      } catch (err: any) {
-        console.error('Resend API failed to deliver email:', err);
-        emailErrorMsg = err.message || 'Exception during email send';
-      }
+    
+    const emailResult = await sendMail({
+      to: normalizedEmail,
+      subject: 'Your Zyron Productions Reset Code',
+      text: `Your password reset code is: ${code}\n\nThis code is valid for 15 minutes. Use it to securely reset your password.`
+    });
+    
+    if (emailResult.success) {
+      emailSent = true;
+    } else {
+      emailErrorMsg = emailResult.error || 'Configuration or delivery error';
     }
     
     return res.json({ 
       success: true, 
       message: emailSent 
         ? 'A secure 6-digit verification code has been sent to your email.' 
-        : `Verification code generated. (Resend email failed: ${emailErrorMsg}. Use code: ${code} to proceed).`,
+        : `Verification code generated. (Email delivery failed: ${emailErrorMsg}. Use code: ${code} to proceed).`,
       code: emailSent ? undefined : code
     });
   } catch (err: any) {
@@ -401,6 +483,93 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', requireAuth, async (req: AuthRequest, res: any) => {
   return res.json({ user: req.user });
+});
+
+
+// SMTP Diagnostic endpoints
+app.get('/api/smtp/status', async (req, res) => {
+  if (!transporter) {
+    return res.json({
+      configured: false,
+      working: false,
+      host: smtpHost,
+      port: smtpPort,
+      user: smtpUser,
+      error: 'SMTP_USER and/or SMTP_PASS are missing in the .env configuration.'
+    });
+  }
+
+  try {
+    // Run a live verification check on the connection
+    await new Promise<void>((resolve, reject) => {
+      transporter!.verify((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    return res.json({
+      configured: true,
+      working: true,
+      host: smtpHost,
+      port: smtpPort,
+      user: smtpUser,
+      message: 'SMTP credentials are valid and connection is successful!'
+    });
+  } catch (err: any) {
+    return res.json({
+      configured: true,
+      working: false,
+      host: smtpHost,
+      port: smtpPort,
+      user: smtpUser,
+      error: err.message || 'Verification failed.'
+    });
+  }
+});
+
+app.post('/api/smtp/test', async (req, res) => {
+  const { to } = req.body;
+  const recipient = to ? to.trim() : 'sakethma007@gmail.com';
+
+  if (!transporter) {
+    return res.status(400).json({
+      success: false,
+      error: 'SMTP is not configured. Please define SMTP_USER and SMTP_PASS environment variables.'
+    });
+  }
+
+  try {
+    const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
+    const info = await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: 'Test Email: Zyron Productions SMTP Verification',
+      html: `
+        <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
+          <h2 style="color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px;">Zyron SMTP Diagnostic Test</h2>
+          <p>This is a diagnostic email verifying that your <strong>Gmail SMTP/Nodemailer</strong> integration is fully functional!</p>
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; margin: 24px 0; color: #166534;">
+            <strong>Status:</strong> Success! The keys and setup are proper.
+          </div>
+          <p style="font-size: 11px; color: #737373;">Sent at: ${new Date().toISOString()}</p>
+        </div>
+      `
+    });
+
+    return res.json({
+      success: true,
+      message: `Test email sent successfully to ${recipient}!`,
+      messageId: info.messageId,
+      response: info.response
+    });
+  } catch (err: any) {
+    console.error('SMTP diagnostics test failed:', err);
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to send test email.'
+    });
+  }
 });
 
 

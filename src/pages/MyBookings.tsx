@@ -425,23 +425,14 @@ export default function MyBookings({
                             </button>
                           )}
 
-                          <div className="grid grid-cols-2 gap-2">
+                          <div className="flex w-full">
                             <button
                               id={`pref-btn-${booking.id}`}
                               onClick={() => openPrefForm(booking)}
-                              className="flex items-center justify-center space-x-1 border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white py-2 text-xs font-mono uppercase text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
+                              className="w-full flex items-center justify-center space-x-1 border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white py-2 text-xs font-mono uppercase text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer"
                             >
                               <Edit className="h-3.5 w-3.5" />
                               <span>Preferences</span>
-                            </button>
-
-                            <button
-                              id={`cancel-btn-${booking.id}`}
-                              onClick={() => setConfirmCancelId(booking.id)}
-                              className="flex items-center justify-center space-x-1 border border-red-200 text-red-600 hover:bg-red-50/10 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                              <span>Cancel</span>
                             </button>
                           </div>
                         </>
@@ -485,41 +476,6 @@ export default function MyBookings({
               </div>
             );
           })}
-        </div>
-      )}
-
-      {/* Themed Confirmation Dialog for Cancellation */}
-      {confirmCancelId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-xs">
-          <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 max-w-md w-full p-6 md:p-8 space-y-6 text-left">
-            <div className="flex items-start space-x-3 text-red-600">
-              <ShieldAlert className="h-6 w-6 shrink-0 mt-0.5" />
-              <div>
-                <h3 className="font-serif text-lg font-bold text-neutral-900 dark:text-white">Cancel booking?</h3>
-                <p className="text-xs text-neutral-500 mt-1 font-light leading-relaxed">
-                  Are you sure you want to cancel this booking experience? This will release your ticket seats back into the live inventory immediately. This action cannot be undone.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                id="dialog-cancel-dismiss-btn"
-                onClick={() => setConfirmCancelId(null)}
-                className="border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-xs font-mono uppercase text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white transition-colors cursor-pointer"
-              >
-                No, Keep Spot
-              </button>
-              <button
-                id="dialog-cancel-confirm-btn"
-                onClick={handleCancelBooking}
-                disabled={submittingCancel}
-                className="bg-red-600 text-white hover:bg-red-700 px-4 py-2 text-xs font-mono uppercase transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {submittingCancel ? 'Cancelling…' : 'Yes, Cancel Reservation'}
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

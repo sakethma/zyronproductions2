@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
 import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
@@ -243,6 +243,9 @@ export default function Admin({
   
   const [showScanner, setShowScanner] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [lastScanResult, setLastScanResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [manualNameInput, setManualNameInput] = useState('');
+  const lastScannedRef = useRef<{ code: string; time: number } | null>(null);
 
   const requestCameraPermission = async () => {
     try {
@@ -266,6 +269,13 @@ export default function Admin({
     if (checkingIn) return;
     const cleanQr = qrValue.trim();
 
+    const now = Date.now();
+    if (lastScannedRef.current && lastScannedRef.current.code === cleanQr && now - lastScannedRef.current.time < 3000) {
+      // Ignore repeat scan during 3-second cooldown to avoid rapid double-submitting
+      return;
+    }
+    lastScannedRef.current = { code: cleanQr, time: now };
+
     let bookingId = '';
     if (cleanQr.startsWith('ZYRON-TICKET-')) {
       bookingId = cleanQr.replace('ZYRON-TICKET-', '');
@@ -274,24 +284,75 @@ export default function Admin({
     }
 
     if (!bookingId) {
+      setLastScanResult({ success: false, message: `Invalid ticket QR format: ${cleanQr}` });
       triggerToast(`Invalid ticket QR format: ${cleanQr}`);
       return;
     }
     setCheckingIn(true);
+    setLastScanResult(null);
     try {
       const res = await apiFetch(`/api/admin/bookings/${bookingId}/checkin`, {
         method: 'POST',
       });
       const data = await res.json();
       if (!res.ok) {
+        setLastScanResult({ success: false, message: data.error || 'Check-in failed' });
         triggerToast(data.error || 'Check-in failed');
       } else {
+        setLastScanResult({ success: true, message: `Successfully checked in ${data.booking.guest_name}!` });
         triggerToast(`Checked in ${data.booking.guest_name} successfully!`);
         fetchGuests(selectedEventId);
-        // Keep scanner open briefly for user feedback, then close
-        setTimeout(() => setShowScanner(false), 2000);
       }
     } catch (e: any) {
+      setLastScanResult({ success: false, message: 'Network error during check-in' });
+      triggerToast('Network error during check-in');
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const handleManualCheckInByName = async () => {
+    if (!manualNameInput.trim()) {
+      triggerToast('Please enter a name to check in.');
+      return;
+    }
+    const searchName = manualNameInput.trim().toLowerCase();
+    const matchedBookings = guests.filter(
+      (b) => b.guest_name.toLowerCase().includes(searchName) && b.cancelled_at === null
+    );
+
+    if (matchedBookings.length === 0) {
+      setLastScanResult({ success: false, message: `No active reservation found for name "${manualNameInput}"` });
+      triggerToast(`No active reservation found for "${manualNameInput}"`);
+      return;
+    }
+
+    const pendingBooking = matchedBookings.find((b) => !b.checked_in);
+    if (!pendingBooking) {
+      const alreadyCheckedIn = matchedBookings[0];
+      setLastScanResult({ success: false, message: `"${alreadyCheckedIn.guest_name}" is already checked in.` });
+      triggerToast(`"${alreadyCheckedIn.guest_name}" is already checked in.`);
+      return;
+    }
+
+    setCheckingIn(true);
+    setLastScanResult(null);
+    try {
+      const res = await apiFetch(`/api/admin/bookings/${pendingBooking.id}/checkin`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setLastScanResult({ success: false, message: data.error || 'Manual check-in failed' });
+        triggerToast(data.error || 'Manual check-in failed');
+      } else {
+        setLastScanResult({ success: true, message: `Successfully checked in ${data.booking.guest_name} manually!` });
+        triggerToast(`Checked in ${data.booking.guest_name} successfully!`);
+        setManualNameInput('');
+        fetchGuests(selectedEventId);
+      }
+    } catch (e: any) {
+      setLastScanResult({ success: false, message: 'Network error during check-in' });
       triggerToast('Network error during check-in');
     } finally {
       setCheckingIn(false);
@@ -1012,6 +1073,20 @@ export default function Admin({
                   </div>
                 )}
               </div>
+
+              {lastScanResult && (
+                <div className={`mt-4 w-full max-w-sm p-3 border font-mono text-xs uppercase flex items-start space-x-2.5 ${
+                  lastScanResult.success 
+                    ? 'border-green-200 bg-green-50 text-green-800 dark:border-green-950 dark:bg-green-950/20 dark:text-green-400' 
+                    : 'border-red-200 bg-red-50 text-red-800 dark:border-red-950 dark:bg-red-950/20 dark:text-red-400'
+                }`}>
+                  <div className="shrink-0 mt-0.5">
+                    {lastScanResult.success ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+                  </div>
+                  <span>{lastScanResult.message}</span>
+                </div>
+              )}
+
               <div className="mt-4 flex flex-col items-center space-y-2">
                 <button
                   onClick={requestCameraPermission}
@@ -1025,6 +1100,30 @@ export default function Admin({
                 >
                   Close Scanner
                 </button>
+              </div>
+
+              <div className="mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-800 w-full max-w-sm text-left">
+                <h5 className="font-mono text-xs uppercase tracking-wider mb-2 text-neutral-400">Ask for guest name (Manual Check-In)</h5>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={manualNameInput}
+                    onChange={(e) => setManualNameInput(e.target.value)}
+                    placeholder="Enter guest name..."
+                    className="flex-1 border border-neutral-300 dark:border-neutral-700 bg-transparent px-3 py-1.5 text-xs text-neutral-800 dark:text-white rounded-none focus:border-neutral-900 dark:focus:border-white outline-none"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleManualCheckInByName();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handleManualCheckInByName}
+                    className="px-4 py-1.5 bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 text-xs font-mono uppercase tracking-wider transition-colors hover:opacity-80"
+                  >
+                    Check In
+                  </button>
+                </div>
               </div>
             </div>
           )}
