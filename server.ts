@@ -62,7 +62,7 @@ async function sendConfirmationEmail(booking: any, event: any) {
 }
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'db.json');
 

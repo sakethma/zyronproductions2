@@ -1,0 +1,14 @@
+{
+  "users": [
+    {
+      "uid": "test-uid-123",
+      "email": "test@example.com",
+      "role": "user",
+      "id": "test-uid-123"
+    }
+  ],
+  "events": [],
+  "bookings": [],
+  "gallery_items": [],
+  "notifications": []
+}

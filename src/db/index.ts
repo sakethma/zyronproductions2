@@ -85,22 +85,33 @@ function matchRow(row: any, sqlExpr: any): boolean {
     if (!expr || !expr.queryChunks) return;
     for (const chunk of expr.queryChunks) {
       if (!chunk) continue;
-      const cname = chunk.constructor?.name;
-      if (cname === 'StringChunk') {
-        const val = chunk.value || '';
-        if (val.toLowerCase().includes('is null')) {
+      
+      if (chunk.queryChunks !== undefined) {
+        // It's a nested SQL expression
+        scan(chunk);
+      } else if (chunk.table !== undefined && chunk.name !== undefined) {
+        // It's a Column (PgColumn / Column)
+        cols.push(chunk.name);
+      } else if (chunk.encoder !== undefined || ('brand' in chunk && 'encoder' in chunk)) {
+        // It's a Param
+        params.push(chunk.value);
+      } else if (chunk.value !== undefined) {
+        // It's a StringChunk
+        const val = chunk.value;
+        let valStr = '';
+        if (typeof val === 'string') {
+          valStr = val;
+        } else if (Array.isArray(val)) {
+          valStr = val.join('');
+        }
+        
+        if (valStr.toLowerCase().includes('is null')) {
           checkIsNull = true;
           if (cols.length > 0) {
             isNullCol = cols[cols.length - 1];
             cols.pop();
           }
         }
-      } else if (cname && (cname.startsWith('Pg') || cname.startsWith('Column'))) {
-        cols.push(chunk.name);
-      } else if (cname === 'Param') {
-        params.push(chunk.value);
-      } else if (cname === 'SQL') {
-        scan(chunk);
       }
     }
   };
