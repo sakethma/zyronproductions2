@@ -33,6 +33,7 @@ if (smtpUser && smtpPass) {
       user: smtpUser,
       pass: smtpPass,
     },
+    family: 4, // Force IPv4 to bypass Render IPv6 routing issues
     pool: true, // Use connection pooling to prevent socket starvation
     maxConnections: 3,
     maxMessages: 100,
@@ -47,6 +48,7 @@ if (smtpUser && smtpPass) {
       user: smtpUser,
       pass: smtpPass,
     },
+    family: 4, // Force IPv4 to bypass Render IPv6 routing issues
     tls: {
       rejectUnauthorized
     },
