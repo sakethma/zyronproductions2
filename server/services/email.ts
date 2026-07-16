@@ -1,16 +1,4 @@
-import nodemailer from 'nodemailer';
-import { Resend } from 'resend';
-import dns from 'dns';
-
-// Force IPv4 DNS resolution first to bypass Render/Cloud environments IPv6 routing bugs (connect ENETUNREACH)
-if (typeof dns.setDefaultResultOrder === 'function') {
-  dns.setDefaultResultOrder('ipv4first');
-}
-
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const RESEND_FROM = 'Zyron Productions <onboarding@resend.dev>';
-
-const cleanEnvVar = (val: string | undefined): string | undefined => {
+export const cleanEnvVar = (val: string | undefined): string | undefined => {
   if (!val) return val;
   let clean = val.trim();
   if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
@@ -19,113 +7,81 @@ const cleanEnvVar = (val: string | undefined): string | undefined => {
   return clean;
 };
 
-const customDnsLookup = (
-  hostname: string,
-  options: any,
-  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
-) => {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
+export const parseFromAddress = (fromStr: string) => {
+  const match = fromStr.match(/^(.*?)\s*<(.*?)>$/);
+  if (match) {
+    return { name: match[1].trim(), email: match[2].trim() };
   }
-  return dns.lookup(hostname, { ...options, family: 4 }, callback);
+  return { name: 'Zyron Productions', email: fromStr.trim() };
 };
 
-// SMTP Transporter setup
-export const smtpHost = cleanEnvVar(process.env.SMTP_HOST) || 'smtp.gmail.com';
-export const smtpPort = parseInt(cleanEnvVar(process.env.SMTP_PORT) || '587', 10);
-export const smtpUser = cleanEnvVar(process.env.SMTP_USER);
-export const smtpPass = cleanEnvVar(process.env.SMTP_PASS);
+export const brevoApiKey = cleanEnvVar(process.env.BREVO_API_KEY) || cleanEnvVar(process.env.SENDINBLUE_API_KEY);
 
-export let smtpVerified = false;
-export let smtpVerifyError: string | null = null;
-export let transporter: nodemailer.Transporter | null = null;
-
-if (smtpUser && smtpPass) {
-  const rejectUnauthorized = process.env.SMTP_REJECT_UNAUTHORIZED === 'false' ? false : true;
-  const isGmail = smtpHost.toLowerCase().includes('gmail.com');
-
-  transporter = nodemailer.createTransport((isGmail ? {
-    service: 'gmail',
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-    family: 4, // Force IPv4 to bypass Render IPv6 routing issues
-    lookup: customDnsLookup,
-    pool: true, // Use connection pooling to prevent socket starvation
-    maxConnections: 3,
-    maxMessages: 100,
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 5000,
-  } : {
-    host: smtpHost,
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: {
-      user: smtpUser,
-      pass: smtpPass,
-    },
-    family: 4, // Force IPv4 to bypass Render IPv6 routing issues
-    lookup: customDnsLookup,
-    tls: {
-      rejectUnauthorized
-    },
-    connectionTimeout: 5000,
-    greetingTimeout: 5000,
-    socketTimeout: 5000,
-  }) as any);
-  console.log(`[SMTP] Nodemailer Transporter initialized for user: ${smtpUser} (Gmail Service Option: ${isGmail})`);
-  
-  // Verify SMTP connection on startup
-  transporter.verify((error) => {
-    if (error) {
-      smtpVerified = false;
-      smtpVerifyError = error.message;
-      console.error('❌ Nodemailer SMTP Transporter Verification FAILED:', error.message);
-      if (isGmail && (error.message.includes('Username and Password not accepted') || error.message.includes('auth'))) {
-        console.error('💡 TIP: Gmail SMTP requires a 16-character "App Password" rather than your standard Gmail password.');
-        console.error('   How to configure:');
-        console.error('   1. Go to your Google Account Settings (https://myaccount.google.com).');
-        console.error('   2. Navigate to "Security" -> Enable "2-Step Verification" if not already enabled.');
-        console.error('   3. Scroll to the bottom of "2-Step Verification" page and select "App passwords".');
-        console.error('   4. Create a new app password (select App="Mail", Device="Other").');
-        console.error('   5. Copy the generated 16-character password and set it as SMTP_PASS.');
-      }
-    } else {
-      smtpVerified = true;
-      smtpVerifyError = null;
-      console.log('✅ Nodemailer SMTP Transporter is successfully verified and ready to send emails!');
-    }
-  });
+if (brevoApiKey) {
+  console.log('✅ Brevo REST API Integration is initialized and ready to dispatch emails!');
 } else {
-  console.log('Nodemailer SMTP variables (SMTP_USER/SMTP_PASS) are not set. SMTP is not active.');
+  console.log('ℹ️ Brevo REST API is not configured. Email delivery will run in Simulated/Sandbox mode.');
 }
 
-export async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }) {
-  if (transporter) {
-    const from = cleanEnvVar(process.env.SMTP_FROM) || `Zyron Productions <${smtpUser}>`;
+export interface SendMailResult {
+  success: boolean;
+  service?: string;
+  id?: string;
+  error?: string;
+}
+
+export async function sendMailViaBrevoApi({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }): Promise<SendMailResult> {
+  if (!brevoApiKey) {
+    throw new Error('Brevo API key is not configured.');
+  }
+
+  const fromStr = cleanEnvVar(process.env.SMTP_FROM) || 'Zyron Productions <onboarding@brevo.com>';
+  const parsedFrom = parseFromAddress(fromStr);
+
+  console.log(`[Email] Attempting dispatch via Brevo REST API to: ${to}`);
+
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'accept': 'application/json',
+      'api-key': brevoApiKey,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: {
+        name: parsedFrom.name,
+        email: parsedFrom.email
+      },
+      to: [{ email: to }],
+      subject: subject,
+      htmlContent: html || text || '',
+      textContent: text || '',
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Brevo API responded with status ${response.status}: ${errorText}`);
+  }
+
+  const data = await response.json();
+  console.log('Email sent successfully via Brevo REST API. Message ID:', data.messageId);
+  return { success: true, service: 'Brevo REST API', id: data.messageId };
+}
+
+export async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }): Promise<SendMailResult> {
+  if (brevoApiKey) {
     try {
-      const info = await transporter.sendMail({
-        from,
-        to,
-        subject,
-        html,
-        text,
-        replyTo: 'zyroninbox@gmail.com',
-      });
-      console.log('Email sent successfully via Gmail SMTP. MessageID:', info.messageId);
-      return { success: true, service: 'SMTP', id: info.messageId };
-    } catch (err: any) {
-      console.error('SMTP sending failed:', err);
-      return { success: false, error: err.message || 'SMTP sending failed' };
+      return await sendMailViaBrevoApi({ to, subject, html, text });
+    } catch (brevoErr: any) {
+      console.error('Brevo REST API dispatch failed:', brevoErr);
+      return { success: false, error: brevoErr.message || 'Brevo API sending failed' };
     }
   }
 
-  console.log(`[EMAIL NOT SENT - NO SMTP CONFIG] To: ${to}, Subject: ${subject}`);
+  console.log(`[EMAIL NOT SENT - NO BREVO CONFIG] To: ${to}, Subject: ${subject}`);
   if (text) console.log(`[TEXT]: ${text}`);
-  return { success: false, error: 'Gmail SMTP is not configured. Please define SMTP_USER and SMTP_PASS environment variables.' };
+  return { success: false, error: 'Brevo REST API is not configured. Please define BREVO_API_KEY environment variable.' };
 }
 
 function escapeHtml(unsafe: any): string {

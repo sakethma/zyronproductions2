@@ -1368,13 +1368,13 @@ export default function Admin({
             <div className="space-y-1">
               <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
                 <Mail className="h-5 w-5 text-violet-600 dark:text-violet-500" />
-                SMTP & QR Code Dispatcher
+                Brevo &amp; QR Code Dispatcher
               </h3>
               <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">End-to-End Delivery Diagnostics</p>
             </div>
 
             <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed font-light">
-              This module triggers a live simulated reservation transaction, generates a secure unique entry credential, asserts/embeds the exact QR payload structure (<span className="font-mono text-neutral-900 dark:text-white font-semibold">ZYRON-TICKET-&lt;id&gt;</span>), and relays a full-stack HTML email via configured Gmail SMTP credentials.
+              This module triggers a live simulated reservation transaction, generates a secure unique entry credential, asserts/embeds the exact QR payload structure (<span className="font-mono text-neutral-900 dark:text-white font-semibold">ZYRON-TICKET-&lt;id&gt;</span>), and relays a full-stack HTML email via your configured Brevo REST API credentials.
             </p>
 
             <div className="space-y-4 font-sans text-xs pt-2">
@@ -1423,7 +1423,7 @@ export default function Admin({
               <div className="flex flex-col items-center justify-center py-20 space-y-4">
                 <div className="w-12 h-12 border-4 border-violet-600 border-t-transparent rounded-full animate-spin"></div>
                 <div className="text-center">
-                  <p className="text-xs font-mono text-neutral-900 dark:text-white tracking-widest uppercase animate-pulse">ESTABLISHING SMTP SHAKEHAND...</p>
+                  <p className="text-xs font-mono text-neutral-900 dark:text-white tracking-widest uppercase animate-pulse">ESTABLISHING BREVO DISPATCH...</p>
                   <p className="text-[10px] text-neutral-400 font-mono mt-1">Simulating live booking, payload injection and envelope relay</p>
                 </div>
               </div>
@@ -1440,13 +1440,13 @@ export default function Admin({
               <div className="border border-red-200 dark:border-red-950/40 bg-red-50/50 dark:bg-red-950/10 p-5 space-y-3 font-mono text-xs">
                 <div className="flex items-center space-x-2 text-red-600">
                   <AlertCircle className="h-5 w-5 shrink-0" />
-                  <span className="font-bold uppercase tracking-wider">SMTP DISPATCH TIMEOUT / ERROR</span>
+                  <span className="font-bold uppercase tracking-wider">BREVO DISPATCH TIMEOUT / ERROR</span>
                 </div>
                 <p className="text-neutral-600 dark:text-neutral-300 leading-relaxed break-words">
                   {e2eError}
                 </p>
                 <div className="border-t border-red-100 dark:border-red-900/30 pt-3 text-[10px] text-neutral-500 leading-normal">
-                  💡 Tip: Verify that <span className="text-neutral-700 dark:text-white">SMTP_USER</span> and <span className="text-neutral-700 dark:text-white">SMTP_PASS</span> variables are active in your environment variables config, and that Google App Passwords are valid.
+                  💡 Tip: Verify that the <span className="text-neutral-700 dark:text-white">BREVO_API_KEY</span> environment variable is active and correct in your environment variables configuration.
                 </div>
               </div>
             )}
@@ -1460,7 +1460,7 @@ export default function Admin({
                     <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
                     <div>
                       <p className="font-bold uppercase tracking-wider">E2E Simulation Mode Active</p>
-                      <p className="text-[10px] text-amber-500/80 mt-0.5">Mock reservation processed &amp; persisted in the local directory, but live email was bypassed. Set SMTP_USER and SMTP_PASS variables to enable real SMTP mail dispatch.</p>
+                      <p className="text-[10px] text-amber-500/80 mt-0.5">Mock reservation processed &amp; persisted in the local directory, but live email was bypassed. Set the BREVO_API_KEY variable to enable real Brevo REST API mail dispatch.</p>
                     </div>
                   </div>
                 ) : (

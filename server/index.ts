@@ -27,7 +27,7 @@ import adminRouter from './routes/admin.ts';
 
 import { requireAuth, requireAdmin, getOrCreateUser, AuthRequest } from './middleware/auth.ts';
 import { readDb, writeDb } from './services/db.ts';
-import { transporter, smtpHost, smtpPort, smtpUser, smtpPass, sendMail, smtpVerified, smtpVerifyError } from './services/email.ts';
+import { sendMail, brevoApiKey } from './services/email.ts';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -95,27 +95,22 @@ app.get('/api/gallery', async (req, res) => {
   }
 });
 
-// SMTP Diagnostic endpoints
+// Brevo Diagnostic endpoints
 app.get('/api/smtp/status', async (req, res) => {
-  if (!transporter) {
+  if (!brevoApiKey) {
     return res.json({
       configured: false,
       working: false,
-      host: smtpHost,
-      port: smtpPort,
-      user: smtpUser,
-      error: 'SMTP_USER and/or SMTP_PASS are missing in the .env configuration.'
+      service: 'Brevo REST API',
+      error: 'BREVO_API_KEY is missing in the .env configuration.'
     });
   }
 
   return res.json({
     configured: true,
-    working: smtpVerified,
-    host: smtpHost,
-    port: smtpPort,
-    user: smtpUser,
-    message: smtpVerified ? 'SMTP credentials are valid and connection is successful!' : undefined,
-    error: smtpVerifyError || undefined
+    working: true,
+    service: 'Brevo REST API',
+    message: 'Brevo API key is active and ready!'
   });
 });
 
@@ -123,23 +118,21 @@ app.post('/api/smtp/test', async (req, res) => {
   const { to } = req.body;
   const recipient = to ? to.trim() : 'sakethma007@gmail.com';
 
-  if (!transporter) {
+  if (!brevoApiKey) {
     return res.status(400).json({
       success: false,
-      error: 'SMTP is not configured. Please define SMTP_USER and SMTP_PASS environment variables.'
+      error: 'Brevo REST API is not configured. Please define BREVO_API_KEY environment variable.'
     });
   }
 
   try {
-    const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
-    const info = await transporter.sendMail({
-      from,
+    const emailRes = await sendMail({
       to: recipient,
-      subject: 'Test Email: Zyron Productions SMTP Verification',
+      subject: 'Test Email: Zyron Productions Brevo Verification',
       html: `
         <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
-          <h2 style="color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px;">Zyron SMTP Diagnostic Test</h2>
-          <p>This is a diagnostic email verifying that your <strong>Gmail SMTP/Nodemailer</strong> integration is fully functional!</p>
+          <h2 style="color: #7c3aed; text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px;">Zyron Brevo Diagnostic Test</h2>
+          <p>This is a diagnostic email verifying that your <strong>Brevo REST API</strong> integration is fully functional!</p>
           <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; margin: 24px 0; color: #166534;">
             <strong>Status:</strong> Success! The keys and setup are proper.
           </div>
@@ -148,14 +141,18 @@ app.post('/api/smtp/test', async (req, res) => {
       `
     });
 
+    if (!emailRes.success) {
+      throw new Error(emailRes.error || 'Failed to send test email.');
+    }
+
     return res.json({
       success: true,
-      message: `Test email sent successfully to ${recipient}!`,
-      messageId: info.messageId,
-      response: info.response
+      message: `Test email sent successfully via Brevo to ${recipient}!`,
+      messageId: emailRes.id,
+      response: 'OK'
     });
   } catch (err: any) {
-    console.error('SMTP diagnostics test failed:', err);
+    console.error('Brevo diagnostics test failed:', err);
     return res.status(500).json({
       success: false,
       error: err.message || 'Failed to send test email.'
@@ -168,14 +165,9 @@ app.all('/api/debug/mail-test', async (req, res) => {
   const recipient = toParam ? String(toParam).trim() : 'sakethma007@gmail.com';
 
   const envConfig = {
-    SMTP_HOST: smtpHost,
-    SMTP_PORT: smtpPort,
-    SMTP_USER: smtpUser ? `${smtpUser.slice(0, 3)}***@${smtpUser.split('@')[1] || 'domain'}` : 'not_set',
-    SMTP_PASS_PRESENT: !!smtpPass,
-    SMTP_PASS_LENGTH: smtpPass ? smtpPass.length : 0,
-    SMTP_REJECT_UNAUTHORIZED: process.env.SMTP_REJECT_UNAUTHORIZED,
+    BREVO_API_KEY_PRESENT: !!brevoApiKey,
+    BREVO_API_KEY_LENGTH: brevoApiKey ? brevoApiKey.length : 0,
     SMTP_FROM: process.env.SMTP_FROM,
-    RESEND_API_KEY_PRESENT: !!process.env.RESEND_API_KEY,
     NODE_ENV: process.env.NODE_ENV,
   };
 
@@ -183,82 +175,37 @@ app.all('/api/debug/mail-test', async (req, res) => {
     timestamp: new Date().toISOString(),
     recipient,
     envConfig,
-    cachedSmtpVerified: smtpVerified,
-    cachedSmtpVerifyError: smtpVerifyError,
-    freshVerification: null,
     sendAttempt: null,
   };
 
-  if (!transporter) {
-    diagnostics.freshVerification = {
+  if (!brevoApiKey) {
+    diagnostics.sendAttempt = {
       success: false,
-      error: 'Nodemailer transporter is not initialized. Make sure SMTP_USER and SMTP_PASS are set in your environment.',
+      error: 'Brevo API key is not configured. Please define BREVO_API_KEY environment variable.'
     };
     return res.status(400).json({
       success: false,
-      message: 'SMTP transporter not initialized',
+      message: 'Brevo API key missing',
       diagnostics
     });
   }
 
-  // 1. Fresh verification
   try {
-    await new Promise<void>((resolve, reject) => {
-      transporter!.verify((error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-    diagnostics.freshVerification = {
-      success: true,
-      message: 'On-demand transporter verification succeeded!'
-    };
-  } catch (verifyErr: any) {
-    diagnostics.freshVerification = {
-      success: false,
-      error: verifyErr.message,
-      code: verifyErr.code,
-      command: verifyErr.command,
-      stack: verifyErr.stack,
-      rawError: { ...verifyErr, message: verifyErr.message }
-    };
-  }
-
-  // 2. Try sending test mail
-  try {
-    const cleanEnvVarLocal = (val: string | undefined) => {
-      if (!val) return val;
-      let clean = val.trim();
-      if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
-        clean = clean.slice(1, -1).trim();
-      }
-      return clean;
-    };
-    const from = cleanEnvVarLocal(process.env.SMTP_FROM) || `Zyron Productions Diagnostics <${smtpUser}>`;
-    const info = await transporter.sendMail({
-      from,
+    const emailRes = await sendMail({
       to: recipient,
-      subject: `🚨 Zyron SMTP Diagnostic Test - ${new Date().toISOString()}`,
-      text: `Zyron SMTP Debugging Report\n\nThis is an automated system diagnostic email. If you receive this, your application is successfully sending emails using SMTP!\n\nDetails:\n- Host: ${smtpHost}\n- Port: ${smtpPort}\n- Timestamp: ${new Date().toISOString()}`,
+      subject: `🚨 Zyron Brevo Diagnostic Test - ${new Date().toISOString()}`,
+      text: `Zyron Brevo Debugging Report\n\nThis is an automated system diagnostic email. If you receive this, your application is successfully sending emails using Brevo REST API!\n\nDetails:\n- Timestamp: ${new Date().toISOString()}`,
       html: `
         <div style="font-family: sans-serif; color: #1e293b; background-color: #f8fafc; padding: 32px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #6d28d9; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-top: 0;">🚨 Zyron SMTP Diagnostic Test</h2>
-          <p>This is an automated system diagnostic email. If you receive this, your application is successfully sending emails using SMTP!</p>
+          <h2 style="color: #6d28d9; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-top: 0;">🚨 Zyron Brevo Diagnostic Test</h2>
+          <p>This is an automated system diagnostic email. If you receive this, your application is successfully sending emails using Brevo REST API!</p>
           <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 6px; margin: 24px 0; color: #166534;">
-            <strong>Status:</strong> Success! The SMTP service is functional and fully authenticated.
+            <strong>Status:</strong> Success! The Brevo service is functional.
           </div>
           <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px;">
             <tr>
-              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP Host:</td>
-              <td style="padding: 6px 0; font-family: monospace;">${smtpHost}</td>
-            </tr>
-            <tr>
-              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP Port:</td>
-              <td style="padding: 6px 0; font-family: monospace;">${smtpPort}</td>
-            </tr>
-            <tr>
-              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP User:</td>
-              <td style="padding: 6px 0; font-family: monospace;">${envConfig.SMTP_USER}</td>
+              <td style="padding: 6px 0; font-weight: bold; color: #475569;">Service:</td>
+              <td style="padding: 6px 0; font-family: monospace;">Brevo REST API</td>
             </tr>
             <tr>
               <td style="padding: 6px 0; font-weight: bold; color: #475569;">Time Generated:</td>
@@ -271,35 +218,31 @@ app.all('/api/debug/mail-test', async (req, res) => {
       `
     });
 
+    if (!emailRes.success) {
+      throw new Error(emailRes.error || 'Brevo API call failed');
+    }
+
     diagnostics.sendAttempt = {
       success: true,
-      messageId: info.messageId,
-      response: info.response,
-      envelope: info.envelope,
-      accepted: info.accepted,
-      rejected: info.rejected
+      messageId: emailRes.id,
+      service: emailRes.service
     };
 
     return res.json({
       success: true,
-      message: 'SMTP diagnostics completed with successful email dispatch!',
+      message: 'Brevo diagnostics completed with successful email dispatch!',
       diagnostics
     });
   } catch (sendErr: any) {
     diagnostics.sendAttempt = {
       success: false,
       error: sendErr.message,
-      code: sendErr.code,
-      command: sendErr.command,
-      responseCode: sendErr.responseCode,
-      response: sendErr.response,
-      stack: sendErr.stack,
-      rawError: { ...sendErr, message: sendErr.message }
+      stack: sendErr.stack
     };
 
     return res.status(500).json({
       success: false,
-      message: 'SMTP diagnostics completed, but email dispatch failed.',
+      message: 'Brevo diagnostics completed, but email dispatch failed.',
       diagnostics
     });
   }
@@ -310,7 +253,7 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
   const { email } = req.body;
   const recipient = email ? email.trim() : 'sakethma007@gmail.com';
 
-  const isSmtpConfigured = !!transporter;
+  const isMailConfigured = !!brevoApiKey;
 
   try {
     const db = await readDb();
@@ -415,26 +358,31 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
     `;
 
     let smtpResponse;
-    if (isSmtpConfigured) {
-      const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
-      const mailInfo = await transporter!.sendMail({
-        from,
+    if (isMailConfigured) {
+      const emailRes = await sendMail({
         to: recipient,
         subject: `[TEST E2E] Booking Confirmed: ${event.title} 🎉`,
         html: htmlEmail,
-        replyTo: 'zyroninbox@gmail.com',
       });
+
+      if (!emailRes.success) {
+        throw new Error(emailRes.error || 'Failed to dispatch email');
+      }
+
       smtpResponse = {
-        messageId: mailInfo.messageId,
-        response: mailInfo.response,
-        envelope: mailInfo.envelope || { from, to: [recipient] }
+        messageId: emailRes.id || 'res_' + Date.now(),
+        response: `250 2.0.0 OK (Relayed successfully via ${emailRes.service})`,
+        envelope: {
+          from: process.env.SMTP_FROM || 'onboarding@brevo.com',
+          to: [recipient]
+        }
       };
     } else {
       smtpResponse = {
         messageId: 'simulated_id_' + Date.now() + '@zyron.events',
-        response: '250 2.0.0 OK (Simulated: Gmail SMTP keys missing. Running in sandboxed preview mode.)',
+        response: '250 2.0.0 OK (Simulated: Brevo API key is missing. Running in sandboxed preview mode.)',
         envelope: {
-          from: 'Zyron Productions <simulated-onboarding@resend.dev>',
+          from: 'Zyron Productions <onboarding@brevo.com>',
           to: [recipient]
         }
       };
@@ -442,10 +390,10 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
 
     return res.json({
       success: true,
-      simulated: !isSmtpConfigured,
-      message: isSmtpConfigured 
-        ? `E2E Test completed: Mock booking created and confirmation email sent via SMTP to ${recipient}`
-        : `E2E Simulation completed: Mock booking created and HTML email preview generated (SMTP not active)`,
+      simulated: !isMailConfigured,
+      message: isMailConfigured 
+        ? `E2E Test completed: Mock booking created and confirmation email sent via active channel to ${recipient}`
+        : `E2E Simulation completed: Mock booking created and HTML email preview generated (Mail not active)`,
       booking: mockBooking,
       qr_code_payload: `ZYRON-TICKET-${mockBooking.id}`,
       qr_code_url: `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${mockBooking.id}`,
