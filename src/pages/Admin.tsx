@@ -1455,13 +1455,23 @@ export default function Admin({
               <div className="space-y-6 font-mono text-xs text-neutral-800 dark:text-neutral-200">
                 
                 {/* Visual success alert */}
-                <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center space-x-3 text-emerald-600">
-                  <CheckCircle2 className="h-5 w-5 shrink-0" />
-                  <div>
-                    <p className="font-bold uppercase tracking-wider">E2E Delivery Confirmed</p>
-                    <p className="text-[10px] text-emerald-500/80 mt-0.5">Mock reservation processed and email relayed successfully.</p>
+                {e2eResult.simulated ? (
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-4 flex items-start space-x-3 text-amber-600 dark:text-amber-500">
+                    <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold uppercase tracking-wider">E2E Simulation Mode Active</p>
+                      <p className="text-[10px] text-amber-500/80 mt-0.5">Mock reservation processed &amp; persisted in the local directory, but live email was bypassed. Set SMTP_USER and SMTP_PASS variables to enable real SMTP mail dispatch.</p>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 flex items-center space-x-3 text-emerald-600">
+                    <CheckCircle2 className="h-5 w-5 shrink-0" />
+                    <div>
+                      <p className="font-bold uppercase tracking-wider">E2E Delivery Confirmed</p>
+                      <p className="text-[10px] text-emerald-500/80 mt-0.5">Mock reservation processed and email relayed successfully.</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Grid for booking details and QR Code verification */}
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
@@ -1535,8 +1545,12 @@ export default function Admin({
                 {/* SMTP Server details */}
                 <div className="border border-neutral-200 dark:border-neutral-800 p-4 space-y-2 bg-neutral-950 text-neutral-300">
                   <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider border-b border-neutral-800 pb-1.5 flex justify-between items-center">
-                    <span>[3] Raw Gmail SMTP Dispatch Logs</span>
-                    <span className="text-[9px] text-emerald-400 animate-pulse font-normal">● STABLE SHAKEHAND</span>
+                    <span>[3] SMTP Envelope &amp; Handshake Logs</span>
+                    {e2eResult.simulated ? (
+                      <span className="text-[9px] text-amber-400 font-normal">● SIMULATED ENVELOPE</span>
+                    ) : (
+                      <span className="text-[9px] text-emerald-400 animate-pulse font-normal">● STABLE SHAKEHAND</span>
+                    )}
                   </p>
                   
                   <div className="space-y-1.5 font-mono text-[10px]">
@@ -1546,7 +1560,7 @@ export default function Admin({
                     </p>
                     <p className="break-all text-neutral-400 mt-2">
                       <strong className="text-neutral-200">Mail Server Response:</strong><br />
-                      <span className="text-emerald-400 font-bold">{e2eResult.smtp_response.response}</span>
+                      <span className={e2eResult.simulated ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>{e2eResult.smtp_response.response}</span>
                     </p>
                     <div className="grid grid-cols-2 gap-4 mt-2 pt-2 border-t border-neutral-900">
                       <div>
@@ -1560,6 +1574,24 @@ export default function Admin({
                     </div>
                   </div>
                 </div>
+
+                {/* [4] Ticket Email Live Preview Frame */}
+                {e2eResult.html && (
+                  <div className="border border-neutral-200 dark:border-neutral-800 p-4 space-y-3 bg-neutral-50 dark:bg-neutral-900/20">
+                    <p className="text-[10px] text-neutral-400 font-bold uppercase tracking-wider border-b border-neutral-200 dark:border-neutral-800 pb-1.5 flex justify-between items-center">
+                      <span>[4] Ticket Email Template Preview</span>
+                      <span className="text-[8px] bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-1.5 py-0.5 font-normal">RENDERED TICKET</span>
+                    </p>
+                    <div className="border border-neutral-200 dark:border-neutral-800 bg-white overflow-hidden shadow-xs">
+                      <iframe
+                        title="HTML Ticket Email Preview"
+                        srcDoc={e2eResult.html}
+                        className="w-full h-[360px] border-none bg-white"
+                        sandbox="allow-same-origin"
+                      />
+                    </div>
+                  </div>
+                )}
 
               </div>
             )}

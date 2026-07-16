@@ -6,7 +6,6 @@
 import React, { useState } from 'react';
 import { Calendar, MapPin, ArrowRight, ArrowUpDown } from 'lucide-react';
 import { Event } from '../types';
-import { EventCardSkeleton } from '../components/Skeleton';
 
 interface EventsProps {
   events: Event[];
@@ -76,10 +75,9 @@ export default function Events({
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {[1, 2, 3].map((n) => (
-            <EventCardSkeleton key={n} />
-          ))}
+        <div className="flex flex-col items-center justify-center py-24 space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+          <p className="font-mono text-xs tracking-wider text-neutral-400 uppercase">Gathering upcoming experiences...</p>
         </div>
       ) : sortedEvents.length === 0 ? (
         <div className="border border-neutral-200 dark:border-neutral-800 py-24 text-center">

@@ -8,7 +8,6 @@ import { motion } from 'motion/react';
 import { Calendar, MapPin, ArrowRight, Clock } from 'lucide-react';
 import { Event } from '../types';
 import CanvasBackground from '../components/CanvasBackground';
-import { EventCardSkeleton } from '../components/Skeleton';
 
 interface HomeProps {
   events: Event[];
@@ -189,10 +188,9 @@ export default function Home({
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[1, 2, 3].map((n) => (
-              <EventCardSkeleton key={n} />
-            ))}
+          <div className="flex flex-col items-center justify-center py-20 w-full space-y-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+            <p className="font-mono text-xs tracking-wider text-neutral-400 uppercase">Loading curation roster...</p>
           </div>
         ) : publishedEvents.length === 0 ? (
           <div className="border border-neutral-200 dark:border-neutral-800 p-16 text-center">

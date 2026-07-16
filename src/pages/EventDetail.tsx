@@ -8,7 +8,6 @@ import { motion } from 'motion/react';
 import { Calendar, MapPin, Ticket, ShieldCheck, AlertCircle, Users, ArrowLeft } from 'lucide-react';
 import { Event, TicketTier, User } from '../types';
 import { apiFetch } from '../lib/api';
-import { EventDetailSkeleton } from '../components/Skeleton';
 import LoadingOverlay from '../components/LoadingOverlay';
 
 interface EventDetailProps {
@@ -112,7 +111,12 @@ export default function EventDetail({
   }, [event, user, hasPrefilled]);
 
   if (isLoading) {
-    return <EventDetailSkeleton />;
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+        <p className="font-mono text-xs tracking-wider text-neutral-400 uppercase">Loading experience details...</p>
+      </div>
+    );
   }
 
   if (!event || event.status !== 'published') {

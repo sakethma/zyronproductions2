@@ -8,7 +8,6 @@ import { QRCodeSVG } from 'qrcode.react';
 import { Calendar, MapPin, Ticket, ShieldAlert, CheckCircle, Edit, Trash2, XCircle, HeartHandshake, Utensils, Accessibility, AlertCircle } from 'lucide-react';
 import { Booking, PaymentStatus } from '../types';
 import { apiFetch } from '../lib/api';
-import { BookingCardSkeleton } from '../components/Skeleton';
 import LoadingOverlay from '../components/LoadingOverlay';
 
 interface MyBookingsProps {
@@ -323,10 +322,9 @@ export default function MyBookings({
       </div>
 
       {isLoading ? (
-        <div className="space-y-6">
-          {[1, 2].map((n) => (
-            <BookingCardSkeleton key={n} />
-          ))}
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
+          <p className="font-mono text-xs tracking-wider text-neutral-400 uppercase">Retrieving your bookings...</p>
         </div>
       ) : bookings.length === 0 ? (
         <div className="border border-neutral-200 dark:border-neutral-800 py-24 text-center">

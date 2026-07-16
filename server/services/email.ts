@@ -13,7 +13,18 @@ export const smtpPass = process.env.SMTP_PASS;
 export let transporter: nodemailer.Transporter | null = null;
 if (smtpUser && smtpPass) {
   const rejectUnauthorized = process.env.SMTP_REJECT_UNAUTHORIZED === 'false' ? false : true;
-  transporter = nodemailer.createTransport({
+  const isGmail = smtpHost.toLowerCase().includes('gmail.com');
+
+  transporter = nodemailer.createTransport((isGmail ? {
+    service: 'gmail',
+    auth: {
+      user: smtpUser,
+      pass: smtpPass,
+    },
+    pool: true, // Use connection pooling to prevent socket starvation
+    maxConnections: 3,
+    maxMessages: 100,
+  } : {
     host: smtpHost,
     port: smtpPort,
     secure: smtpPort === 465,
@@ -24,13 +35,22 @@ if (smtpUser && smtpPass) {
     tls: {
       rejectUnauthorized
     }
-  });
-  console.log(`Nodemailer SMTP Transporter configured for user: ${smtpUser}`);
+  }) as any);
+  console.log(`[SMTP] Nodemailer Transporter initialized for user: ${smtpUser} (Gmail Service Option: ${isGmail})`);
   
   // Verify SMTP connection on startup
   transporter.verify((error) => {
     if (error) {
       console.error('❌ Nodemailer SMTP Transporter Verification FAILED:', error.message);
+      if (isGmail && (error.message.includes('Username and Password not accepted') || error.message.includes('auth'))) {
+        console.error('💡 TIP: Gmail SMTP requires a 16-character "App Password" rather than your standard Gmail password.');
+        console.error('   How to configure:');
+        console.error('   1. Go to your Google Account Settings (https://myaccount.google.com).');
+        console.error('   2. Navigate to "Security" -> Enable "2-Step Verification" if not already enabled.');
+        console.error('   3. Scroll to the bottom of "2-Step Verification" page and select "App passwords".');
+        console.error('   4. Create a new app password (select App="Mail", Device="Other").');
+        console.error('   5. Copy the generated 16-character password and set it as SMTP_PASS.');
+      }
     } else {
       console.log('✅ Nodemailer SMTP Transporter is successfully verified and ready to send emails!');
     }
