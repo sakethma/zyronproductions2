@@ -220,7 +220,15 @@ app.all('/api/debug/mail-test', async (req, res) => {
 
   // 2. Try sending test mail
   try {
-    const from = process.env.SMTP_FROM || `Zyron Productions Diagnostics <${smtpUser}>`;
+    const cleanEnvVarLocal = (val: string | undefined) => {
+      if (!val) return val;
+      let clean = val.trim();
+      if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
+        clean = clean.slice(1, -1).trim();
+      }
+      return clean;
+    };
+    const from = cleanEnvVarLocal(process.env.SMTP_FROM) || `Zyron Productions Diagnostics <${smtpUser}>`;
     const info = await transporter.sendMail({
       from,
       to: recipient,

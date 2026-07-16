@@ -4,11 +4,20 @@ import { Resend } from 'resend';
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const RESEND_FROM = 'Zyron Productions <onboarding@resend.dev>';
 
+const cleanEnvVar = (val: string | undefined): string | undefined => {
+  if (!val) return val;
+  let clean = val.trim();
+  if ((clean.startsWith('"') && clean.endsWith('"')) || (clean.startsWith("'") && clean.endsWith("'"))) {
+    clean = clean.slice(1, -1).trim();
+  }
+  return clean;
+};
+
 // SMTP Transporter setup
-export const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-export const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
-export const smtpUser = process.env.SMTP_USER;
-export const smtpPass = process.env.SMTP_PASS;
+export const smtpHost = cleanEnvVar(process.env.SMTP_HOST) || 'smtp.gmail.com';
+export const smtpPort = parseInt(cleanEnvVar(process.env.SMTP_PORT) || '587', 10);
+export const smtpUser = cleanEnvVar(process.env.SMTP_USER);
+export const smtpPass = cleanEnvVar(process.env.SMTP_PASS);
 
 export let smtpVerified = false;
 export let smtpVerifyError: string | null = null;
@@ -74,7 +83,7 @@ if (smtpUser && smtpPass) {
 
 export async function sendMail({ to, subject, html, text }: { to: string; subject: string; html?: string; text?: string }) {
   if (transporter) {
-    const from = process.env.SMTP_FROM || `Zyron Productions <${smtpUser}>`;
+    const from = cleanEnvVar(process.env.SMTP_FROM) || `Zyron Productions <${smtpUser}>`;
     try {
       const info = await transporter.sendMail({
         from,
