@@ -8,6 +8,13 @@
       "when": 1784181849027,
       "tag": "0000_open_mercury",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1784212457078,
+      "tag": "0001_real_titanium_man",
+      "breakpoints": true
     }
   ]
 }

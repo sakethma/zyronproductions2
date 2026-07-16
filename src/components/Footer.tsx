@@ -78,10 +78,7 @@ export default function Footer({ setCurrentRoute }: FooterProps) {
           <p className="text-xs font-mono text-neutral-400">
             &copy; {currentYear} Zyron Productions. All rights reserved.
           </p>
-          <p className="text-xs font-mono text-neutral-400">
-            Monochrome Minimal Theme v1.0.0
-          </p>
-        </div>
+          </div>
       </div>
     </footer>
   );
