@@ -18,6 +18,18 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
   const [resetCode, setResetCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
 
+  const handleSafeJson = async (res: Response) => {
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      const text = await res.text();
+      if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+        throw new Error('The server returned an HTML page instead of JSON. This usually means the API endpoint was not found or the server is not running/configured correctly.');
+      }
+      throw new Error(text.slice(0, 150) || 'Server returned invalid response structure');
+    }
+    return res.json();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
@@ -37,7 +49,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         body: JSON.stringify({ email: normalizedEmail, password })
       });
       
-      const data = await res.json();
+      const data = await handleSafeJson(res);
       
       if (res.ok && data.user && data.token) {
         localStorage.setItem('dev_token', data.token);
@@ -47,7 +59,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         setErrorMsg(data.error || 'Failed to authenticate');
       }
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'An unexpected error occurred during authentication.');
     } finally {
       setLoading(false);
     }
@@ -70,7 +82,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         },
         body: JSON.stringify({ email: normalizedEmail })
       });
-      const data = await res.json();
+      const data = await handleSafeJson(res);
       if (res.ok) {
         setSuccessMsg(data.message || 'Verification code sent to your email.');
         if (data.code) {
@@ -81,7 +93,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         setErrorMsg(data.error || 'Failed to send reset code.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }
@@ -104,7 +116,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         },
         body: JSON.stringify({ email: normalizedEmail, code: resetCode.trim(), newPassword })
       });
-      const data = await res.json();
+      const data = await handleSafeJson(res);
       if (res.ok) {
         setSuccessMsg('Password updated successfully! You can now sign in.');
         setIsForgotPassword(false);
@@ -116,7 +128,7 @@ export default function Auth({ onSignInSuccess, setCurrentRoute, redirectUrl = '
         setErrorMsg(data.error || 'Failed to reset password.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message);
+      setErrorMsg(err.message || 'An unexpected error occurred.');
     } finally {
       setLoading(false);
     }

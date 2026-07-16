@@ -47,6 +47,10 @@ export default function App() {
           localStorage.removeItem('dev_token');
           setUser(null);
         }
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Not JSON response');
+        }
         return res.json();
       })
       .then((data) => {
@@ -66,7 +70,13 @@ export default function App() {
   const fetchEvents = () => {
     if (events.length === 0) setIsLoadingEvents(true);
     apiFetch('/api/events')
-      .then((res) => res.json())
+      .then((res) => {
+        const contentType = res.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error('Not JSON response');
+        }
+        return res.json();
+      })
       .then((data) => {
         if (Array.isArray(data)) {
           setEvents(data);
@@ -87,7 +97,13 @@ export default function App() {
     // Poll for real-time updates every 5 seconds
     const intervalId = setInterval(() => {
       apiFetch('/api/events')
-        .then((res) => res.json())
+        .then((res) => {
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            throw new Error('Not JSON response');
+          }
+          return res.json();
+        })
         .then((data) => {
           if (Array.isArray(data)) {
             setEvents(data);
