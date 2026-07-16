@@ -9,15 +9,32 @@ import dotenv from 'dotenv';
 // Load environment variables immediately before checking SQL_HOST
 dotenv.config();
 
-const hasSql = !!process.env.SQL_HOST;
+const hasSql = !!process.env.SQL_HOST || !!process.env.DATABASE_URL;
 
 export const createPool = () => {
   if (!hasSql) return null;
+
+  if (process.env.DATABASE_URL) {
+    const isSsl = process.env.SQL_SSL === 'true' || 
+                  process.env.DATABASE_URL.includes('neon.tech') || 
+                  process.env.DATABASE_URL.includes('render.com') ||
+                  process.env.DATABASE_URL.includes('sslmode=require');
+    return new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: isSsl ? { rejectUnauthorized: false } : undefined,
+      connectionTimeoutMillis: 15000,
+    });
+  }
+
+  const isSsl = process.env.SQL_SSL === 'true' || 
+                process.env.SQL_HOST?.includes('neon') || 
+                process.env.SQL_HOST?.includes('render');
   return new Pool({
     host: process.env.SQL_HOST,
-    user: process.env.SQL_USER,
-    password: process.env.SQL_PASSWORD,
+    user: process.env.SQL_USER || process.env.SQL_ADMIN_USER,
+    password: process.env.SQL_PASSWORD || process.env.SQL_ADMIN_PASSWORD,
     database: process.env.SQL_DB_NAME,
+    ssl: isSsl ? { rejectUnauthorized: false } : undefined,
     connectionTimeoutMillis: 15000,
   });
 };
