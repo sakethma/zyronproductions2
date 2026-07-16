@@ -341,7 +341,7 @@ export default function MyBookings({
                   {/* Event Thumbnail */}
                   <div className="md:col-span-3 aspect-[4/3] bg-neutral-100 dark:bg-neutral-900 overflow-hidden border border-neutral-200 dark:border-neutral-800">
                     <img
-                      src={booking.event_image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600'}
+                      src={booking.event_image_url || 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600'} loading="lazy"
                       alt={booking.event_title}
                       className="w-full h-full object-cover filter mix-blend-luminosity"
                       referrerPolicy="no-referrer"

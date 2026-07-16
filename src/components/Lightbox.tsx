@@ -64,7 +64,7 @@ export default function Lightbox({ item, onClose, onPrev, onNext }: LightboxProp
         <div className="flex max-h-[75vh] w-full items-center justify-center overflow-hidden border border-neutral-800 bg-neutral-950">
           <img
             id="lightbox-main-img"
-            src={item.image_url}
+            src={item.image_url} loading="lazy"
             alt={item.caption || 'Gallery item'}
             className="h-full max-h-[75vh] w-full object-contain pointer-events-none select-none transition-transform duration-300"
             referrerPolicy="no-referrer"

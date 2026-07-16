@@ -698,7 +698,7 @@ export default function Admin({
         </div>
 
         {/* Tab Controls */}
-        <div className="flex border border-neutral-200 dark:border-neutral-800 p-1 bg-neutral-50 dark:bg-neutral-900">
+        <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide border border-neutral-200 dark:border-neutral-800 p-1 bg-neutral-50 dark:bg-neutral-900 max-w-full">
           {[
             { id: 'analytics', label: 'Metrics', icon: BarChart3 },
             { id: 'events', label: 'Events', icon: CalendarDays },
@@ -715,7 +715,7 @@ export default function Admin({
                 onClick={() => {
                   setActiveTab(tab.id as AdminTab);
                 }}
-                className={`flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
+                className={`flex-shrink-0 flex items-center space-x-1.5 px-3.5 py-1.5 text-xs font-mono uppercase tracking-wider transition-colors cursor-pointer ${
                   activeTab === tab.id
                     ? 'bg-neutral-950 text-white dark:bg-white dark:text-neutral-950 font-bold'
                     : 'text-neutral-500 hover:text-neutral-950 dark:hover:text-white'
@@ -1468,7 +1468,7 @@ export default function Admin({
                 {gallery.map((item) => (
                   <div key={item.id} className="group relative aspect-square border border-neutral-100 dark:border-neutral-900 overflow-hidden bg-neutral-50">
                     <img
-                      src={item.image_url}
+                      src={item.image_url} loading="lazy"
                       alt={item.caption}
                       className="h-full w-full object-cover filter mix-blend-luminosity hover:mix-blend-normal transition-all duration-150"
                       referrerPolicy="no-referrer"

@@ -209,7 +209,7 @@ export default function Home({
                 {/* Image */}
                 <div className="relative aspect-video w-full overflow-hidden bg-neutral-100 dark:bg-neutral-900">
                   <img
-                    src={event.image_url}
+                    src={event.image_url} loading="lazy"
                     alt={event.title}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     referrerPolicy="no-referrer"
