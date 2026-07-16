@@ -190,8 +190,21 @@ async function writeDb(data: DbState) {
     }
   }
 }
-// Ignore initDb
-async function initDb() {}
+// Run migrations dynamically on start if SQL is configured
+import { migrate } from 'drizzle-orm/node-postgres/migrator';
+
+async function initDb() {
+  const hasSql = !!process.env.SQL_HOST || !!process.env.DATABASE_URL;
+  if (hasSql) {
+    try {
+      console.log('Running pending database migrations...');
+      await migrate(drizzleDb, { migrationsFolder: './drizzle' });
+      console.log('Database migrations completed successfully!');
+    } catch (err: any) {
+      console.error('Failed to run database migrations:', err);
+    }
+  }
+}
 
 
 // ------------------- API ROUTES -------------------
