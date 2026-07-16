@@ -21,7 +21,7 @@ import adminRouter from './routes/admin.ts';
 
 import { requireAuth, requireAdmin, getOrCreateUser, AuthRequest } from './middleware/auth.ts';
 import { readDb, writeDb } from './services/db.ts';
-import { transporter, smtpHost, smtpPort, smtpUser, sendMail } from './services/email.ts';
+import { transporter, smtpHost, smtpPort, smtpUser, smtpPass, sendMail, smtpVerified, smtpVerifyError } from './services/email.ts';
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
@@ -102,32 +102,15 @@ app.get('/api/smtp/status', async (req, res) => {
     });
   }
 
-  try {
-    await new Promise<void>((resolve, reject) => {
-      transporter!.verify((error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-
-    return res.json({
-      configured: true,
-      working: true,
-      host: smtpHost,
-      port: smtpPort,
-      user: smtpUser,
-      message: 'SMTP credentials are valid and connection is successful!'
-    });
-  } catch (err: any) {
-    return res.json({
-      configured: true,
-      working: false,
-      host: smtpHost,
-      port: smtpPort,
-      user: smtpUser,
-      error: err.message || 'Verification failed.'
-    });
-  }
+  return res.json({
+    configured: true,
+    working: smtpVerified,
+    host: smtpHost,
+    port: smtpPort,
+    user: smtpUser,
+    message: smtpVerified ? 'SMTP credentials are valid and connection is successful!' : undefined,
+    error: smtpVerifyError || undefined
+  });
 });
 
 app.post('/api/smtp/test', async (req, res) => {
@@ -170,6 +153,140 @@ app.post('/api/smtp/test', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: err.message || 'Failed to send test email.'
+    });
+  }
+});
+
+app.all('/api/debug/mail-test', async (req, res) => {
+  const toParam = req.query.to || req.body?.to;
+  const recipient = toParam ? String(toParam).trim() : 'sakethma007@gmail.com';
+
+  const envConfig = {
+    SMTP_HOST: smtpHost,
+    SMTP_PORT: smtpPort,
+    SMTP_USER: smtpUser ? `${smtpUser.slice(0, 3)}***@${smtpUser.split('@')[1] || 'domain'}` : 'not_set',
+    SMTP_PASS_PRESENT: !!smtpPass,
+    SMTP_PASS_LENGTH: smtpPass ? smtpPass.length : 0,
+    SMTP_REJECT_UNAUTHORIZED: process.env.SMTP_REJECT_UNAUTHORIZED,
+    SMTP_FROM: process.env.SMTP_FROM,
+    RESEND_API_KEY_PRESENT: !!process.env.RESEND_API_KEY,
+    NODE_ENV: process.env.NODE_ENV,
+  };
+
+  const diagnostics: any = {
+    timestamp: new Date().toISOString(),
+    recipient,
+    envConfig,
+    cachedSmtpVerified: smtpVerified,
+    cachedSmtpVerifyError: smtpVerifyError,
+    freshVerification: null,
+    sendAttempt: null,
+  };
+
+  if (!transporter) {
+    diagnostics.freshVerification = {
+      success: false,
+      error: 'Nodemailer transporter is not initialized. Make sure SMTP_USER and SMTP_PASS are set in your environment.',
+    };
+    return res.status(400).json({
+      success: false,
+      message: 'SMTP transporter not initialized',
+      diagnostics
+    });
+  }
+
+  // 1. Fresh verification
+  try {
+    await new Promise<void>((resolve, reject) => {
+      transporter!.verify((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    diagnostics.freshVerification = {
+      success: true,
+      message: 'On-demand transporter verification succeeded!'
+    };
+  } catch (verifyErr: any) {
+    diagnostics.freshVerification = {
+      success: false,
+      error: verifyErr.message,
+      code: verifyErr.code,
+      command: verifyErr.command,
+      stack: verifyErr.stack,
+      rawError: { ...verifyErr, message: verifyErr.message }
+    };
+  }
+
+  // 2. Try sending test mail
+  try {
+    const from = process.env.SMTP_FROM || `Zyron Productions Diagnostics <${smtpUser}>`;
+    const info = await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: `🚨 Zyron SMTP Diagnostic Test - ${new Date().toISOString()}`,
+      text: `Zyron SMTP Debugging Report\n\nThis is an automated system diagnostic email. If you receive this, your application is successfully sending emails using SMTP!\n\nDetails:\n- Host: ${smtpHost}\n- Port: ${smtpPort}\n- Timestamp: ${new Date().toISOString()}`,
+      html: `
+        <div style="font-family: sans-serif; color: #1e293b; background-color: #f8fafc; padding: 32px; max-width: 600px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <h2 style="color: #6d28d9; border-bottom: 2px solid #e2e8f0; padding-bottom: 12px; margin-top: 0;">🚨 Zyron SMTP Diagnostic Test</h2>
+          <p>This is an automated system diagnostic email. If you receive this, your application is successfully sending emails using SMTP!</p>
+          <div style="background-color: #f0fdf4; border: 1px solid #bbf7d0; padding: 16px; border-radius: 6px; margin: 24px 0; color: #166534;">
+            <strong>Status:</strong> Success! The SMTP service is functional and fully authenticated.
+          </div>
+          <table style="width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px;">
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP Host:</td>
+              <td style="padding: 6px 0; font-family: monospace;">${smtpHost}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP Port:</td>
+              <td style="padding: 6px 0; font-family: monospace;">${smtpPort}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #475569;">SMTP User:</td>
+              <td style="padding: 6px 0; font-family: monospace;">${envConfig.SMTP_USER}</td>
+            </tr>
+            <tr>
+              <td style="padding: 6px 0; font-weight: bold; color: #475569;">Time Generated:</td>
+              <td style="padding: 6px 0;">${new Date().toISOString()}</td>
+            </tr>
+          </table>
+          <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 24px 0;" />
+          <p style="font-size: 12px; color: #64748b;">This diagnostic route is exposed at <code>/api/debug/mail-test</code>.</p>
+        </div>
+      `
+    });
+
+    diagnostics.sendAttempt = {
+      success: true,
+      messageId: info.messageId,
+      response: info.response,
+      envelope: info.envelope,
+      accepted: info.accepted,
+      rejected: info.rejected
+    };
+
+    return res.json({
+      success: true,
+      message: 'SMTP diagnostics completed with successful email dispatch!',
+      diagnostics
+    });
+  } catch (sendErr: any) {
+    diagnostics.sendAttempt = {
+      success: false,
+      error: sendErr.message,
+      code: sendErr.code,
+      command: sendErr.command,
+      responseCode: sendErr.responseCode,
+      response: sendErr.response,
+      stack: sendErr.stack,
+      rawError: { ...sendErr, message: sendErr.message }
+    };
+
+    return res.status(500).json({
+      success: false,
+      message: 'SMTP diagnostics completed, but email dispatch failed.',
+      diagnostics
     });
   }
 });

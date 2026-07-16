@@ -213,7 +213,9 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
 
     const event = db.events.find((e: any) => e.id === booking.event_id);
     if (event) {
-      await sendConfirmationEmail(booking, event);
+      sendConfirmationEmail(booking, event).catch(err => {
+        console.error('[SMTP BACKGROUND ERROR] Simulated payment email dispatch failed:', err);
+      });
     }
 
     await writeDb(db);
@@ -279,7 +281,9 @@ router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
 
     const event = db.events.find((e: any) => e.id === booking.event_id);
     if (event) {
-      await sendConfirmationEmail(booking, event);
+      sendConfirmationEmail(booking, event).catch(err => {
+        console.error('[SMTP BACKGROUND ERROR] Developer bypass email dispatch failed:', err);
+      });
     }
 
     await writeDb(db);
@@ -363,7 +367,9 @@ router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: a
 
     const event = db.events.find((e: any) => e.id === booking.event_id);
     if (event) {
-      await sendConfirmationEmail(booking, event);
+      sendConfirmationEmail(booking, event).catch(err => {
+        console.error('[SMTP BACKGROUND ERROR] Razorpay verification email dispatch failed:', err);
+      });
     }
 
     await writeDb(db);
