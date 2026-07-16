@@ -2,8 +2,8 @@
 @import "tailwindcss";
 
 @theme {
-  --font-serif: "Fraunces", Georgia, serif;
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-serif: "JetBrains Mono", monospace;
+  --font-sans: "JetBrains Mono", monospace;
   --font-mono: "JetBrains Mono", monospace;
   --font-3d: "Metal Mania", cursive;
 
