@@ -92,7 +92,7 @@ export default function MyBookings({
           }
         })
         .catch(() => {});
-    }, 5000);
+    }, 120000);
     apiFetch('/api/config/razorpay').then(r => r.json()).then(data => {
       setRazorpayConfig(data);
     }).catch(() => {});

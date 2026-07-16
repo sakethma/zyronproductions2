@@ -384,4 +384,28 @@ router.post('/coupons/:id/toggle', requireAdmin, async (req: AuthRequest, res: a
   }
 });
 
+// Admin Reset Bookings (Clear everything)
+router.post('/reset-bookings', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    
+    // Clear all bookings
+    db.bookings = [];
+    
+    // Also reset tickets_sold to 0 on all events
+    db.events = db.events.map((e: any) => ({
+      ...e,
+      tickets_sold: 0,
+      updated_at: new Date().toISOString()
+    }));
+    
+    // Write back updated state to database
+    await writeDb(db);
+    
+    return res.json({ success: true, message: 'All bookings cleared and event seat counts reset successfully.' });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

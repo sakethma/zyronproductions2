@@ -135,7 +135,7 @@ export default function App() {
   useEffect(() => {
     fetchEvents();
     
-    // Poll for real-time updates every 5 seconds
+    // Poll for real-time updates every 2 minutes
     const intervalId = setInterval(() => {
       apiFetch('/api/events')
         .then((res) => {
@@ -151,7 +151,7 @@ export default function App() {
           }
         })
         .catch(() => {});
-    }, 5000);
+    }, 120000);
     
     return () => clearInterval(intervalId);
   }, []);

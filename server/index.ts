@@ -373,7 +373,7 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
         messageId: emailRes.id || 'res_' + Date.now(),
         response: `250 2.0.0 OK (Relayed successfully via ${emailRes.service})`,
         envelope: {
-          from: process.env.SMTP_FROM || 'onboarding@brevo.com',
+          from: process.env.SMTP_FROM || 'tickets@zyronproduction.work.gd',
           to: [recipient]
         }
       };
@@ -382,7 +382,7 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
         messageId: 'simulated_id_' + Date.now() + '@zyron.events',
         response: '250 2.0.0 OK (Simulated: Brevo API key is missing. Running in sandboxed preview mode.)',
         envelope: {
-          from: 'Zyron Productions <onboarding@brevo.com>',
+          from: 'Zyron Productions <tickets@zyronproduction.work.gd>',
           to: [recipient]
         }
       };

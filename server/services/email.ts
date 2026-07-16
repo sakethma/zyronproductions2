@@ -44,7 +44,7 @@ export async function sendMailViaBrevoApi({ to, subject, html, htmlContent, text
     throw new Error('Brevo API key is not configured.');
   }
 
-  const fromStr = cleanEnvVar(process.env.SMTP_FROM) || 'Zyron Productions <onboarding@brevo.com>';
+  const fromStr = cleanEnvVar(process.env.SMTP_FROM) || 'Zyron Productions <tickets@zyronproduction.work.gd>';
   const parsedFrom = parseFromAddress(fromStr);
 
   // Normalize recipient (to) from either string or array
@@ -56,8 +56,20 @@ export async function sendMailViaBrevoApi({ to, subject, html, htmlContent, text
   }
 
   // Normalize HTML and Text content keys
-  const finalHtml = htmlContent || html || '';
+  let finalHtml = htmlContent || html || '';
   const finalTxt = textContent || text || '';
+
+  if (!finalHtml && finalTxt) {
+    // Convert newlines to HTML break tags and wrap in a clean, beautifully branded monospace block
+    finalHtml = `<div style="font-family: monospace; font-size: 14px; line-height: 1.6; color: #171717; background-color: #fafafa; padding: 24px; border: 1px solid #e5e5e5; max-width: 600px; margin: 0 auto;">
+      <h2 style="font-family: serif; color: #7c3aed; margin-top: 0;">ZYRON PRODUCTIONS</h2>
+      <p style="margin-bottom: 24px; white-space: pre-wrap;">${finalTxt.replace(/\r?\n/g, '<br />')}</p>
+      <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;" />
+      <p style="font-size: 10px; color: #737373; text-transform: uppercase; letter-spacing: 1px;">Secure Transaction System</p>
+    </div>`;
+  } else if (!finalHtml) {
+    finalHtml = `<div style="font-family: sans-serif;">System message notification.</div>`;
+  }
 
   console.log(`[Email] Attempting dispatch via Brevo REST API to:`, JSON.stringify(formattedTo));
 

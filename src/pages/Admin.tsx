@@ -78,7 +78,7 @@ export default function Admin({
   useEffect(() => {
     if (activeTab === 'analytics') {
       fetchAnalytics();
-      const interval = setInterval(fetchAnalytics, 5000);
+      const interval = setInterval(fetchAnalytics, 120000);
       return () => clearInterval(interval);
     }
   }, [activeTab]);
@@ -514,7 +514,7 @@ export default function Admin({
   useEffect(() => {
     if (selectedEventId && activeTab === 'guests') {
       fetchGuests(selectedEventId);
-      const interval = setInterval(() => fetchGuests(selectedEventId), 5000);
+      const interval = setInterval(() => fetchGuests(selectedEventId), 120000);
       return () => clearInterval(interval);
     }
   }, [selectedEventId, activeTab]);
@@ -560,6 +560,36 @@ export default function Admin({
       triggerToast('E2E email test failed.');
     } finally {
       setTestingE2e(false);
+    }
+  };
+
+  const [resettingBookings, setResettingBookings] = useState(false);
+
+  const handleResetAllBookings = async () => {
+    if (!window.confirm("CRITICAL WARNING: This action will permanently DELETE all bookings/reservations from the database and RESET all event sold ticket counts to 0. This cannot be undone.\n\nDo you want to proceed?")) {
+      return;
+    }
+
+    setResettingBookings(true);
+    try {
+      const response = await apiFetch('/api/admin/reset-bookings', {
+        method: 'POST',
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Database reset failed.');
+      }
+      triggerToast('DATABASE RESET SUCCESSFUL: All bookings cleared.');
+      refetchEvents();
+      if (selectedEventId) {
+        fetchGuests(selectedEventId);
+      }
+      fetchAdminEvents();
+      fetchAnalytics();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error executing database reset.');
+    } finally {
+      setResettingBookings(false);
     }
   };
 
@@ -1677,48 +1707,82 @@ export default function Admin({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* Left Panel: Trigger Control */}
-          <div className="lg:col-span-5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6 h-fit">
-            <div className="space-y-1">
-              <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
-                <Mail className="h-5 w-5 text-violet-600 dark:text-violet-500" />
-                Brevo &amp; QR Code Dispatcher
-              </h3>
-              <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">End-to-End Delivery Diagnostics</p>
-            </div>
-
-            <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed font-light">
-              This module triggers a live simulated reservation transaction, generates a secure unique entry credential, asserts/embeds the exact QR payload structure (<span className="font-mono text-neutral-900 dark:text-white font-semibold">ZYRON-TICKET-&lt;id&gt;</span>), and relays a full-stack HTML email via your configured Brevo REST API credentials.
-            </p>
-
-            <div className="space-y-4 font-sans text-xs pt-2">
+          <div className="lg:col-span-5 space-y-6">
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-6">
               <div className="space-y-1">
-                <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">RECIPIENT TEST EMAIL</label>
-                <input
-                  type="email"
-                  required
-                  value={testRecipient}
-                  onChange={(e) => setTestRecipient(e.target.value)}
-                  placeholder="e.g. sakethma007@gmail.com"
-                  className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
-                />
-                <p className="text-[9px] text-neutral-400 italic font-mono">Defaults to your registered admin coordinate.</p>
+                <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                  <Mail className="h-5 w-5 text-violet-600 dark:text-violet-500" />
+                  Brevo &amp; QR Code Dispatcher
+                </h3>
+                <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">End-to-End Delivery Diagnostics</p>
               </div>
 
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed font-light">
+                This module triggers a live simulated reservation transaction, generates a secure unique entry credential, asserts/embeds the exact QR payload structure (<span className="font-mono text-neutral-900 dark:text-white font-semibold">ZYRON-TICKET-&lt;id&gt;</span>), and relays a full-stack HTML email via your configured Brevo REST API credentials.
+              </p>
+
+              <div className="space-y-4 font-sans text-xs pt-2">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono text-neutral-400 uppercase font-semibold">RECIPIENT TEST EMAIL</label>
+                  <input
+                    type="email"
+                    required
+                    value={testRecipient}
+                    onChange={(e) => setTestRecipient(e.target.value)}
+                    placeholder="e.g. sakethma007@gmail.com"
+                    className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white font-mono"
+                  />
+                  <p className="text-[9px] text-neutral-400 italic font-mono">Defaults to your registered admin coordinate.</p>
+                </div>
+
+                <button
+                  id="btn-trigger-e2e-diagnostic"
+                  onClick={handleRunE2eEmailTest}
+                  disabled={testingE2e}
+                  className="w-full bg-violet-600 hover:bg-violet-700 text-white border border-transparent py-3 text-xs font-mono uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  {testingE2e ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Transmitting Relay...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="h-4 w-4" />
+                      <span>Trigger E2E Verification</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Database Reset Protocol Card */}
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6 space-y-4">
+              <div className="space-y-1">
+                <h3 className="font-serif text-lg font-bold text-red-600 dark:text-red-500 flex items-center gap-2">
+                  <Trash2 className="h-5 w-5" />
+                  Database Reset Protocol
+                </h3>
+                <p className="text-[10px] font-mono text-neutral-400 uppercase tracking-widest">Permanent Data Removal</p>
+              </div>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 leading-relaxed font-light">
+                This action permanently expunges all booking and reservation records from the system. It also resets the ticket counter on all experiences back to 0. Use with extreme caution.
+              </p>
               <button
-                id="btn-trigger-e2e-diagnostic"
-                onClick={handleRunE2eEmailTest}
-                disabled={testingE2e}
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white border border-transparent py-3 text-xs font-mono uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
+                id="btn-reset-all-bookings"
+                onClick={handleResetAllBookings}
+                disabled={resettingBookings}
+                className="w-full bg-red-600 hover:bg-red-700 text-white border border-transparent py-2.5 text-xs font-mono uppercase tracking-widest transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50 mt-2"
               >
-                {testingE2e ? (
+                {resettingBookings ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Transmitting Relay...</span>
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    <span>Clearing All Data...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="h-4 w-4" />
-                    <span>Trigger E2E Verification</span>
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Reset All Bookings</span>
                   </>
                 )}
               </button>
