@@ -1,5 +1,11 @@
 import nodemailer from 'nodemailer';
 import { Resend } from 'resend';
+import dns from 'dns';
+
+// Force IPv4 DNS resolution first to bypass Render/Cloud environments IPv6 routing bugs (connect ENETUNREACH)
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const RESEND_FROM = 'Zyron Productions <onboarding@resend.dev>';
@@ -11,6 +17,18 @@ const cleanEnvVar = (val: string | undefined): string | undefined => {
     clean = clean.slice(1, -1).trim();
   }
   return clean;
+};
+
+const customDnsLookup = (
+  hostname: string,
+  options: any,
+  callback: (err: NodeJS.ErrnoException | null, address: string, family: number) => void
+) => {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  return dns.lookup(hostname, { ...options, family: 4 }, callback);
 };
 
 // SMTP Transporter setup
@@ -34,6 +52,7 @@ if (smtpUser && smtpPass) {
       pass: smtpPass,
     },
     family: 4, // Force IPv4 to bypass Render IPv6 routing issues
+    lookup: customDnsLookup,
     pool: true, // Use connection pooling to prevent socket starvation
     maxConnections: 3,
     maxMessages: 100,
@@ -49,6 +68,7 @@ if (smtpUser && smtpPass) {
       pass: smtpPass,
     },
     family: 4, // Force IPv4 to bypass Render IPv6 routing issues
+    lookup: customDnsLookup,
     tls: {
       rejectUnauthorized
     },

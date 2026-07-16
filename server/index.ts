@@ -6,6 +6,12 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
+import dns from 'dns';
+
+// Force IPv4 DNS resolution first to bypass Render/Cloud environments IPv6 routing bugs (connect ENETUNREACH)
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 // Load environment variables
 dotenv.config();
