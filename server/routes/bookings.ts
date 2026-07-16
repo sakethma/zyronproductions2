@@ -322,35 +322,6 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Resend email
-router.post('/:id/resend-email', requireAuth, async (req: AuthRequest, res: any) => {
-  try {
-    const db = await readDb();
-    const booking = db.bookings.find((b: any) => b.id === req.params.id);
-    if (!booking) {
-      return res.status(404).json({ error: 'Booking not found.' });
-    }
-
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
-    }
-
-    if (booking.payment_status !== 'paid') {
-      return res.status(400).json({ error: 'Cannot send confirmation email for unpaid bookings.' });
-    }
-
-    const event = db.events.find((e: any) => e.id === booking.event_id);
-    if (!event) {
-      return res.status(404).json({ error: 'Associated event not found.' });
-    }
-
-    await sendConfirmationEmail(booking, event);
-    return res.json({ success: true, message: `Tickets re-sent successfully to ${booking.guest_email}!` });
-  } catch (err: any) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 // DEV bypass
 router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
   try {

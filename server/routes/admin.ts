@@ -116,12 +116,6 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
 router.delete('/events/:id', requireAdmin, async (req: AuthRequest, res: any) => {
   try {
     const eventId = req.params.id;
-    const activeBookings = await drizzleDb.select().from(bookings).where(and(eq(bookings.event_id, eventId), isNull(bookings.cancelled_at)));
-    if (activeBookings.length > 0) {
-      return res.status(400).json({
-        error: 'Cannot delete event with active bookings. Please archive the event instead or cancel existing bookings first.'
-      });
-    }
 
     await drizzleDb.delete(galleryItems).where(eq(galleryItems.event_id, eventId));
     await drizzleDb.delete(bookings).where(eq(bookings.event_id, eventId));

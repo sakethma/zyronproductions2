@@ -38,27 +38,7 @@ export default function MyBookings({
   const [submittingPref, setSubmittingPref] = useState(false);
   const [submittingCancel, setSubmittingCancel] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
-  const [submittingResendId, setSubmittingResendId] = useState<string | null>(null);
   const [submittingPayment, setSubmittingPayment] = useState(false);
-
-  const handleResendEmail = async (bookingId: string) => {
-    setSubmittingResendId(bookingId);
-    try {
-      const response = await apiFetch(`/api/bookings/${bookingId}/resend-email`, {
-        method: 'POST'
-      });
-      const data = await response.json();
-      if (response.ok) {
-        triggerToast(data.message || 'Ticket email sent successfully!');
-      } else {
-        triggerToast(data.error || 'Failed to resend ticket email.');
-      }
-    } catch (err) {
-      triggerToast('Network error while resending email.');
-    } finally {
-      setSubmittingResendId(null);
-    }
-  };
 
   const fetchBookings = () => {
     if (bookings.length === 0) setIsLoading(true);
@@ -469,14 +449,6 @@ export default function MyBookings({
                                 <Ticket className="h-4 w-4" />
                                 <span>View Admission Ticket</span>
                               </button>
-                              <button
-                                id={`resend-card-email-${booking.id}`}
-                                onClick={() => handleResendEmail(booking.id)}
-                                disabled={submittingResendId === booking.id}
-                                className="w-full border border-neutral-200 dark:border-neutral-800 hover:border-black dark:hover:border-white py-1.5 text-[10px] font-mono uppercase text-neutral-700 dark:text-neutral-300 transition-colors cursor-pointer disabled:opacity-50"
-                              >
-                                {submittingResendId === booking.id ? 'Sending...' : 'Resend Ticket Email'}
-                              </button>
                             </div>
                           )}
 
@@ -714,14 +686,6 @@ export default function MyBookings({
                 Present this pass at the gate. The QR code contains your encrypted transaction key for admission check-in.
               </p>
               <div className="flex flex-col gap-2">
-                <button
-                  id={`resend-modal-email-${activePass.id}`}
-                  onClick={() => handleResendEmail(activePass.id)}
-                  disabled={submittingResendId === activePass.id}
-                  className="w-full bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-900 text-neutral-900 dark:text-white border border-neutral-200 dark:border-neutral-800 py-2 text-xs font-mono tracking-wide uppercase transition-all duration-150 cursor-pointer disabled:opacity-50"
-                >
-                  {submittingResendId === activePass.id ? 'Sending Email...' : 'Resend Ticket Email'}
-                </button>
                 <button
                   onClick={() => setActivePass(null)}
                   className="w-full bg-neutral-950 hover:bg-white text-white hover:text-neutral-950 border border-neutral-950 py-2.5 text-xs font-mono tracking-widest uppercase transition-all-150 dark:bg-white dark:hover:bg-neutral-950 dark:text-neutral-950 dark:hover:text-white dark:border-white cursor-pointer"
