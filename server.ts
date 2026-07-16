@@ -16,6 +16,62 @@ import nodemailer from 'nodemailer';
 // Load environment variables
 dotenv.config();
 
+const getJwtSecret = (): string => {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret !== 'zyron-super-secret-key-123') {
+    return envSecret;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    const globalObj = global as any;
+    if (!globalObj.__prod_jwt_secret) {
+      globalObj.__prod_jwt_secret = crypto.randomBytes(32).toString('hex');
+      console.warn('⚠️ WARNING: JWT_SECRET is not configured in production environment! A cryptographically secure random secret was automatically generated.');
+    }
+    return globalObj.__prod_jwt_secret;
+  }
+  return 'zyron-super-secret-key-123';
+};
+
+const getCookieSecret = (): string => {
+  const envSecret = process.env.COOKIE_SECRET;
+  if (envSecret && envSecret !== 'zyron-secret-cookie-key-1337') {
+    return envSecret;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    const globalObj = global as any;
+    if (!globalObj.__prod_cookie_secret) {
+      globalObj.__prod_cookie_secret = crypto.randomBytes(32).toString('hex');
+      console.warn('⚠️ WARNING: COOKIE_SECRET is not configured in production environment! A cryptographically secure random secret was automatically generated.');
+    }
+    return globalObj.__prod_cookie_secret;
+  }
+  return 'zyron-secret-cookie-key-1337';
+};
+
+// Rate limiting state
+const rateLimits = new Map<string, { count: number; resetAt: number }>();
+
+const rateLimiter = (windowMs: number, maxRequests: number) => {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const xForwardedFor = req.headers['x-forwarded-for'];
+    const ip = req.ip || (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor) || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    const state = rateLimits.get(ip);
+
+    if (!state || now > state.resetAt) {
+      rateLimits.set(ip, { count: 1, resetAt: now + windowMs });
+      return next();
+    }
+
+    if (state.count >= maxRequests) {
+      return res.status(429).json({ error: 'Too many login or registration attempts. Please try again later.' });
+    }
+
+    state.count++;
+    next();
+  };
+};
+
 const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const RESEND_FROM = 'Zyron Productions <onboarding@resend.dev>';
 
@@ -27,6 +83,7 @@ const smtpPass = process.env.SMTP_PASS;
 
 let transporter: nodemailer.Transporter | null = null;
 if (smtpUser && smtpPass) {
+  const rejectUnauthorized = process.env.SMTP_REJECT_UNAUTHORIZED === 'false' ? false : true;
   transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
@@ -36,7 +93,7 @@ if (smtpUser && smtpPass) {
       pass: smtpPass,
     },
     tls: {
-      rejectUnauthorized: false
+      rejectUnauthorized
     }
   });
   console.log(`Nodemailer SMTP Transporter configured for user: ${smtpUser}`);
@@ -132,7 +189,7 @@ app.use(express.json({ type: ['application/json', 'text/plain'] }));
 
 // Set up sessions cookie middleware helper
 import cookieParser from 'cookie-parser';
-app.use(cookieParser('zyron-secret-cookie-key-1337'));
+app.use(cookieParser(getCookieSecret()));
 
 // Helper to ensure database is loaded and seeded
 
@@ -279,12 +336,16 @@ async function initDb() {
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'zyron-super-secret-key-123';
+const JWT_SECRET = getJwtSecret();
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', rateLimiter(15 * 60 * 1000, 10), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   const normalizedEmail = email.trim().toLowerCase();
+  
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters long.' });
+  }
   
   try {
     const existing = await drizzleDb.select().from(users).where(eq(users.email, normalizedEmail));
@@ -326,7 +387,7 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', rateLimiter(5 * 60 * 1000, 20), async (req, res) => {
   const { email, password } = req.body;
   if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
   const normalizedEmail = email.trim().toLowerCase();

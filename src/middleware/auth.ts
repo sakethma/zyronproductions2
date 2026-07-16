@@ -1,10 +1,27 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import { db } from '../db/index.ts';
 import { users } from '../db/schema.ts';
 import { eq } from 'drizzle-orm';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'zyron-super-secret-key-123';
+const getJwtSecret = (): string => {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret && envSecret !== 'zyron-super-secret-key-123') {
+    return envSecret;
+  }
+  if (process.env.NODE_ENV === 'production') {
+    const globalObj = global as any;
+    if (!globalObj.__prod_jwt_secret) {
+      globalObj.__prod_jwt_secret = crypto.randomBytes(32).toString('hex');
+      console.warn('⚠️ WARNING: JWT_SECRET is not configured in production environment! A cryptographically secure random secret was automatically generated.');
+    }
+    return globalObj.__prod_jwt_secret;
+  }
+  return 'zyron-super-secret-key-123';
+};
+
+const JWT_SECRET = getJwtSecret();
 
 export interface AuthRequest extends Request {
   user?: any; // We attach the DB user object here
