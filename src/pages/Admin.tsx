@@ -1468,7 +1468,7 @@ export default function Admin({
                 {gallery.map((item) => (
                   <div key={item.id} className="group relative aspect-square border border-neutral-100 dark:border-neutral-900 overflow-hidden bg-neutral-50">
                     <img
-                      src={item.image_url} loading="lazy"
+                      src={item.image_url}
                       alt={item.caption}
                       className="h-full w-full object-cover filter mix-blend-luminosity hover:mix-blend-normal transition-all duration-150"
                       referrerPolicy="no-referrer"

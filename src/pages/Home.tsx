@@ -8,6 +8,8 @@ import { motion } from 'motion/react';
 import { Calendar, MapPin, ArrowRight, Clock } from 'lucide-react';
 import { Event } from '../types';
 import CanvasBackground from '../components/CanvasBackground';
+import ShootingStars from '../components/ShootingStars';
+import BlackHole from '../components/BlackHole';
 
 interface HomeProps {
   events: Event[];
@@ -86,6 +88,10 @@ export default function Home({
         
         {/* Animated Background */}
         <CanvasBackground />
+        <ShootingStars />
+        <div className="absolute inset-0 z-[1] opacity-70 pointer-events-none mix-blend-screen">
+          <BlackHole />
+        </div>
 
         {/* Gradient dark overlay */}
         <div className="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/80 to-transparent z-10"></div>
@@ -209,7 +215,7 @@ export default function Home({
                 {/* Image */}
                 <div className="relative aspect-video w-full overflow-hidden bg-neutral-100 dark:bg-neutral-900">
                   <img
-                    src={event.image_url} loading="lazy"
+                    src={event.image_url}
                     alt={event.title}
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                     referrerPolicy="no-referrer"

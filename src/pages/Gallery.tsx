@@ -79,7 +79,7 @@ export default function Gallery() {
               <img
                 src={item.image_url}
                 alt={item.caption || 'Gallery photo'}
-                loading="lazy"
+               
                 className="h-full w-full object-cover filter mix-blend-luminosity hover:mix-blend-normal transition-all duration-300"
                 referrerPolicy="no-referrer"
               />

@@ -443,7 +443,7 @@ export default function EventDetail({
         <div className="lg:col-span-5 h-fit">
           <div className="border border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
             <img
-              src={event.image_url} loading="lazy"
+              src={event.image_url}
               alt={event.title}
               className="w-full aspect-[4/3] object-cover filter mix-blend-luminosity hover:mix-blend-normal transition-all duration-500"
               referrerPolicy="no-referrer"
