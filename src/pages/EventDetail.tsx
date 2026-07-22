@@ -42,7 +42,7 @@ export default function EventDetail({
   const [quantity, setQuantity] = useState<number>(1);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [razorpayConfig, setRazorpayConfig] = useState<{configured: boolean, key_id: string | null}>({configured: false, key_id: null});
+  const [cashfreeConfig, setCashfreeConfig] = useState<{configured: boolean, app_id: string | null, environment: string}>({configured: false, app_id: null, environment: 'SANDBOX'});
 
   // Guest Details Form State
   const [guestName, setGuestName] = useState('');
@@ -134,8 +134,8 @@ export default function EventDetail({
   }, [selectedTier, quantity, appliedCoupon, event]);
 
   useEffect(() => {
-    apiFetch('/api/config/razorpay').then(r => r.json()).then(data => {
-      setRazorpayConfig(data);
+    apiFetch('/api/config/cashfree').then(r => r.json()).then(data => {
+      setCashfreeConfig(data);
     }).catch(() => {});
   }, []);
 
@@ -233,13 +233,13 @@ export default function EventDetail({
   const selectedTierData = tiers.find((t) => t.key === selectedTier) || tiers[0];
   const totalCents = selectedTierData ? selectedTierData.price * quantity : 0;
 
-  const loadRazorpayScript = () => {
+  const loadCashfreeScript = () => {
     return new Promise((resolve) => {
-      if ((window as any).Razorpay) {
+      if ((window as any).Cashfree) {
         return resolve(true);
       }
       const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
@@ -293,8 +293,8 @@ export default function EventDetail({
       // Refetch events so tickets_sold goes up
       refetchEvents();
       
-      if (!razorpayConfig.configured || !razorpayConfig.key_id) {
-        // Dev bypass for testing when Razorpay is not configured
+      if (!cashfreeConfig.configured) {
+        // Dev bypass for testing when Cashfree is not configured
         const bypassRes = await apiFetch(`/api/bookings/${booking.id}/dev-bypass`, { method: 'POST' });
         if (bypassRes.ok) {
            setCurrentRoute(`/booking-success?bookingId=${booking.id}`);
@@ -305,36 +305,41 @@ export default function EventDetail({
         return;
       }
 
-      const res = await loadRazorpayScript();
+      const res = await loadCashfreeScript();
       if (!res) {
-        setErrorMsg('Failed to load Razorpay SDK. Check your connection.');
+        setErrorMsg('Failed to load Cashfree SDK. Check your connection.');
         setSubmitting(false);
         return;
       }
 
-      const orderData = await apiFetch(`/api/bookings/${booking.id}/razorpay-order`, { method: 'POST' }).then(r => r.json());
+      const orderData = await apiFetch(`/api/bookings/${booking.id}/cashfree-order`, { method: 'POST' }).then(r => r.json());
       if (orderData.error) {
         setErrorMsg(orderData.error);
         setSubmitting(false);
         return;
       }
 
-      const options = {
-        key: razorpayConfig.key_id,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Zyron Productions",
-        description: `Booking for ${event.title}`,
-        order_id: orderData.orderId,
-        handler: async function (response: any) {
+      const cashfree = (window as any).Cashfree({
+        mode: cashfreeConfig.environment === 'PRODUCTION' ? 'production' : 'sandbox'
+      });
+
+      const checkoutOptions = {
+        paymentSessionId: orderData.payment_session_id,
+        redirectTarget: "_modal",
+      };
+
+      cashfree.checkout(checkoutOptions).then(async (result: any) => {
+        if (result.error) {
+          console.error("Cashfree checkout error:", result.error);
+          setErrorMsg(result.error.message || 'Payment cancelled or failed.');
+          setSubmitting(false);
+        } else if (result.paymentDetails) {
           try {
-            const verifyRes = await apiFetch(`/api/bookings/${booking.id}/verify-razorpay`, {
+            const verifyRes = await apiFetch(`/api/bookings/${booking.id}/verify-cashfree`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature
+                order_id: orderData.cf_order_id
               })
             });
             const verifyData = await verifyRes.json();
@@ -348,22 +353,14 @@ export default function EventDetail({
             setErrorMsg('Payment verification failed.');
             setSubmitting(false);
           }
-        },
-        prefill: {
-          name: guestName,
-          email: guestEmail,
-        },
-        theme: {
-          color: "#0a0a0a"
+        } else if (result.redirect) {
+          console.log("Redirecting to Cashfree checkout...");
         }
-      };
-
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function (response: any){
-        setErrorMsg(response.error.description || 'Payment failed.');
+      }).catch((err: any) => {
+        console.error("Cashfree checkout exception:", err);
+        setErrorMsg(err.message || 'Failed to initialize Cashfree checkout.');
         setSubmitting(false);
       });
-      rzp.open();
     } catch (err: any) {
       setErrorMsg(err.message || 'Booking failed. Please try again.');
       setSubmitting(false);

@@ -76,11 +76,20 @@ app.use('/api/events', eventsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/admin', adminRouter);
 
-// Razorpay configuration info for the frontend
+// Cashfree configuration info for the frontend
+app.get('/api/config/cashfree', (req, res) => {
+  return res.json({
+    configured: !!(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY),
+    app_id: process.env.CASHFREE_APP_ID || null,
+    environment: (process.env.CASHFREE_ENV || 'SANDBOX').toUpperCase()
+  });
+});
+
+// Legacy Razorpay endpoint compatibility
 app.get('/api/config/razorpay', (req, res) => {
   return res.json({
-    configured: !!(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
-    key_id: process.env.RAZORPAY_KEY_ID || null
+    configured: !!(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY),
+    key_id: process.env.CASHFREE_APP_ID || null
   });
 });
 

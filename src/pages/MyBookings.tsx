@@ -26,7 +26,7 @@ export default function MyBookings({
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
   const [payingBooking, setPayingBooking] = useState<Booking | null>(null);
   const [prefFormId, setPrefFormId] = useState<string | null>(null);
-  const [razorpayConfig, setRazorpayConfig] = useState<{configured: boolean, key_id: string | null}>({configured: false, key_id: null});
+  const [cashfreeConfig, setCashfreeConfig] = useState<{configured: boolean, app_id: string | null, environment: string}>({configured: false, app_id: null, environment: 'SANDBOX'});
   const [activePass, setActivePass] = useState<Booking | null>(null);
 
   // Preference fields state
@@ -73,8 +73,8 @@ export default function MyBookings({
         })
         .catch(() => {});
     }, 120000);
-    apiFetch('/api/config/razorpay').then(r => r.json()).then(data => {
-      setRazorpayConfig(data);
+    apiFetch('/api/config/cashfree').then(r => r.json()).then(data => {
+      setCashfreeConfig(data);
     }).catch(() => {});
     return () => clearInterval(interval);
   }, []);
@@ -90,61 +90,62 @@ export default function MyBookings({
     setPayingBooking(booking);
   };
 
-  const loadRazorpayScript = () => {
+  const loadCashfreeScript = () => {
     return new Promise((resolve) => {
-      if ((window as any).Razorpay) {
+      if ((window as any).Cashfree) {
         return resolve(true);
       }
       const script = document.createElement('script');
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
       script.onload = () => resolve(true);
       script.onerror = () => resolve(false);
       document.body.appendChild(script);
     });
   };
 
-  const submitRazorpayPayment = async () => {
-    console.log("submitRazorpayPayment started", payingBooking, razorpayConfig);
-    if (!payingBooking || !razorpayConfig.key_id) {
-      alert("Missing booking or razorpay key");
+  const submitCashfreePayment = async () => {
+    if (!payingBooking || !cashfreeConfig.configured) {
+      triggerToast("Missing booking or Cashfree configuration");
       return;
     }
     
     setSubmittingPayment(true);
-    const res = await loadRazorpayScript();
+    const res = await loadCashfreeScript();
     if (!res) {
-      triggerToast('Failed to load Razorpay SDK. Check your connection.');
+      triggerToast('Failed to load Cashfree SDK. Check your connection.');
       setSubmittingPayment(false);
       return;
     }
 
     try {
-      console.log("Fetching order data...");
-      const orderData = await apiFetch(`/api/bookings/${payingBooking.id}/razorpay-order`, { method: 'POST' }).then(r => r.json());
-      console.log("Order data received:", orderData);
+      const orderData = await apiFetch(`/api/bookings/${payingBooking.id}/cashfree-order`, { method: 'POST' }).then(r => r.json());
       if (orderData.error) {
         triggerToast(orderData.error);
         setSubmittingPayment(false);
         return;
       }
 
-      const options = {
-        key: razorpayConfig.key_id,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: "Zyron Productions",
-        description: `Booking for ${payingBooking.event_title || 'Event'}`,
-        order_id: orderData.orderId,
-        handler: async function (response: any) {
-          setSubmittingPayment(true);
+      const cashfree = (window as any).Cashfree({
+        mode: cashfreeConfig.environment === 'PRODUCTION' ? 'production' : 'sandbox'
+      });
+
+      const checkoutOptions = {
+        paymentSessionId: orderData.payment_session_id,
+        redirectTarget: "_modal",
+      };
+
+      cashfree.checkout(checkoutOptions).then(async (result: any) => {
+        if (result.error) {
+          console.error("Cashfree checkout error:", result.error);
+          triggerToast(result.error.message || 'Payment cancelled or failed.');
+          setSubmittingPayment(false);
+        } else if (result.paymentDetails) {
           try {
-            const verifyRes = await apiFetch(`/api/bookings/${payingBooking.id}/verify-razorpay`, {
+            const verifyRes = await apiFetch(`/api/bookings/${payingBooking.id}/verify-cashfree`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_signature: response.razorpay_signature
+                order_id: orderData.cf_order_id
               })
             });
             const verifyData = await verifyRes.json();
@@ -160,27 +161,17 @@ export default function MyBookings({
           } finally {
             setSubmittingPayment(false);
           }
-        },
-        prefill: {
-          name: payingBooking.guest_name,
-          email: payingBooking.guest_email,
-        },
-        theme: {
-          color: "#0a0a0a"
+        } else if (result.redirect) {
+          console.log("Redirecting to Cashfree checkout...");
         }
-      };
-      
-      console.log("Razorpay options:", options);
-      const rzp = new (window as any).Razorpay(options);
-      rzp.on('payment.failed', function (response: any){
-        console.error("Payment failed", response);
-        triggerToast(response.error.description || 'Payment failed.');
+      }).catch((err: any) => {
+        console.error("Cashfree checkout exception:", err);
+        triggerToast('Failed to initialize Cashfree checkout: ' + err.message);
+        setSubmittingPayment(false);
       });
-      setSubmittingPayment(false);
-      rzp.open();
     } catch (err: any) {
-      console.error("Error initializing razorpay", err);
-      triggerToast('Failed to initialize Razorpay checkout: ' + err.message);
+      console.error("Error initializing Cashfree", err);
+      triggerToast('Failed to initialize Cashfree checkout: ' + err.message);
       setSubmittingPayment(false);
     }
   };
@@ -522,15 +513,15 @@ export default function MyBookings({
             </div>
 
             <div className="space-y-4">
-              {razorpayConfig.configured && razorpayConfig.key_id ? (
+              {cashfreeConfig.configured ? (
                 <div className="border border-green-200 dark:border-green-900/50 bg-green-50/20 dark:bg-green-900/10 p-3 flex items-start space-x-2.5 text-xs text-green-700 dark:text-green-400 font-sans">
                   <CheckCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>Razorpay is ready to process your transaction securely.</span>
+                  <span>Cashfree Web Gateway is ready to process your transaction securely.</span>
                 </div>
               ) : (
                 <div className="border border-amber-200 dark:border-amber-900/50 bg-amber-50/20 dark:bg-amber-900/10 p-3 flex items-start space-x-2.5 text-xs text-amber-700 dark:text-amber-400 font-sans">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>Razorpay is not configured. Falling back to Developer Sandbox Mode.</span>
+                  <span>Cashfree is not configured. Falling back to Developer Sandbox Mode.</span>
                 </div>
               )}
             </div>
@@ -543,13 +534,13 @@ export default function MyBookings({
               >
                 Cancel
               </button>
-              {razorpayConfig.configured && razorpayConfig.key_id ? (
+              {cashfreeConfig.configured ? (
                 <button
                   id="payment-modal-pay-btn"
-                  onClick={submitRazorpayPayment}
+                  onClick={submitCashfreePayment}
                   className="bg-neutral-950 hover:bg-white text-white hover:text-neutral-950 border border-neutral-950 px-5 py-2 text-xs font-mono uppercase transition-all-150 dark:bg-white dark:hover:bg-neutral-950 dark:text-neutral-950 dark:hover:text-white dark:border-white cursor-pointer"
                 >
-                  Pay via Razorpay
+                  Pay via Cashfree
                 </button>
               ) : (
                 <button

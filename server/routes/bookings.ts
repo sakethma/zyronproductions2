@@ -7,22 +7,14 @@ import { bookings, events } from '../../src/db/schema.ts';
 import { requireAuth, AuthRequest } from '../middleware/auth.ts';
 import { readDb, writeDb } from '../services/db.ts';
 import { sendConfirmationEmail } from '../services/email.ts';
-import Razorpay from 'razorpay';
 
 const router = Router();
 
-let razorpayInstance: Razorpay | null = null;
-function getRazorpay() {
-  if (!razorpayInstance) {
-    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
-      return null;
-    }
-    razorpayInstance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
-  }
-  return razorpayInstance;
+function getCashfreeBaseUrl() {
+  const env = (process.env.CASHFREE_ENV || 'SANDBOX').toUpperCase();
+  return env === 'PRODUCTION'
+    ? 'https://api.cashfree.com/pg'
+    : 'https://sandbox.cashfree.com/pg';
 }
 
 // User bookings list
@@ -361,8 +353,8 @@ router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Create Razorpay order
-router.post('/:id/razorpay-order', requireAuth, async (req: AuthRequest, res: any) => {
+// Create Cashfree order
+router.post('/:id/cashfree-order', requireAuth, async (req: AuthRequest, res: any) => {
   try {
     const bookingId = req.params.id;
     const db = await readDb();
@@ -376,42 +368,81 @@ router.post('/:id/razorpay-order', requireAuth, async (req: AuthRequest, res: an
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const rzp = getRazorpay();
-    if (!rzp) {
-      return res.status(500).json({ error: 'Razorpay keys not configured on server' });
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+    if (!appId || !secretKey) {
+      return res.status(500).json({ error: 'Cashfree API keys not configured on server' });
     }
 
-    const options = {
-      amount: booking.total_cents,
-      currency: "INR",
-      receipt: booking.id,
+    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get('host')}`;
+    const baseUrl = getCashfreeBaseUrl();
+
+    // Unique order ID format for Cashfree
+    const cleanBookingId = booking.id.replace(/[^a-zA-Z0-9_-]/g, '');
+    const orderId = `order_${cleanBookingId}_${Date.now()}`;
+    const amountInInr = Number((booking.total_cents / 100).toFixed(2));
+
+    const payload = {
+      order_id: orderId,
+      order_amount: amountInInr,
+      order_currency: "INR",
+      customer_details: {
+        customer_id: (booking.user_id || `cust_${cleanBookingId}`).replace(/[^a-zA-Z0-9_-]/g, '_'),
+        customer_name: booking.guest_name || 'Guest',
+        customer_email: booking.guest_email || 'guest@example.com',
+        customer_phone: (booking.guest_phone || '9999999999').replace(/[^0-9]/g, '').slice(-10) || '9999999999'
+      },
+      order_meta: {
+        return_url: `${appUrl}/booking-success?bookingId=${booking.id}&order_id={order_id}`
+      }
     };
 
-    const order = await rzp.orders.create(options);
-    res.json({ orderId: order.id, amount: order.amount, currency: order.currency });
+    const response = await fetch(`${baseUrl}/orders`, {
+      method: 'POST',
+      headers: {
+        'x-client-id': appId,
+        'x-client-secret': secretKey,
+        'x-api-version': '2023-08-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Cashfree Create Order Error:', data);
+      return res.status(response.status).json({ error: data.message || 'Failed to create Cashfree order' });
+    }
+
+    return res.json({
+      cf_order_id: data.order_id,
+      payment_session_id: data.payment_session_id,
+      order_status: data.order_status,
+      amount: booking.total_cents,
+      currency: "INR"
+    });
   } catch (err: any) {
+    console.error('Cashfree order creation exception:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Verify Razorpay
-router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: any) => {
+// Verify Cashfree Payment
+router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: any) => {
   try {
-    const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+    const { order_id } = req.body;
     const bookingId = req.params.id;
-    
-    if (!process.env.RAZORPAY_KEY_SECRET) {
-      return res.status(500).json({ error: 'Razorpay Secret Key not configured on server' });
+
+    const appId = process.env.CASHFREE_APP_ID;
+    const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+    if (!appId || !secretKey) {
+      return res.status(500).json({ error: 'Cashfree API keys not configured on server' });
     }
 
-    const hmac = crypto.createHmac('sha256', process.env.RAZORPAY_KEY_SECRET);
-    hmac.update(razorpay_order_id + "|" + razorpay_payment_id);
-    const generated_signature = hmac.digest('hex');
-
-    if (generated_signature !== razorpay_signature) {
-      return res.status(400).json({ error: 'Invalid payment signature' });
-    }
-
+    const baseUrl = getCashfreeBaseUrl();
     const db = await readDb();
     const booking = db.bookings.find((b: any) => b.id === bookingId);
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
@@ -421,30 +452,72 @@ router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: a
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    booking.payment_status = 'paid';
-    
-    const newNotif = {
-      id: crypto.randomUUID(),
-      user_id: booking.user_id,
-      title: 'Payment Confirmed & Tickets Emailed',
-      message: `Payment of ₹${Math.round(booking.total_cents / 100).toLocaleString()} successfully processed via Razorpay. Your event tickets have been sent to ${booking.guest_email}.`,
-      read: false,
-      created_at: new Date().toISOString(),
-    };
-    db.notifications.unshift(newNotif);
-
-    const event = db.events.find((e: any) => e.id === booking.event_id);
-    if (event) {
-      sendConfirmationEmail(booking, event).catch(err => {
-        console.error('[SMTP BACKGROUND ERROR] Razorpay verification email dispatch failed:', err);
-      });
+    if (booking.payment_status === 'paid') {
+      return res.json({ success: true, booking, message: 'Already paid' });
     }
 
-    await writeDb(db);
-    return res.json({ success: true, booking });
+    if (!order_id) {
+      return res.status(400).json({ error: 'order_id is required for verification' });
+    }
+
+    const response = await fetch(`${baseUrl}/orders/${order_id}`, {
+      method: 'GET',
+      headers: {
+        'x-client-id': appId,
+        'x-client-secret': secretKey,
+        'x-api-version': '2023-08-01'
+      }
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error('Cashfree Order Verification Error:', data);
+      return res.status(response.status).json({ error: data.message || 'Failed to verify Cashfree order' });
+    }
+
+    if (data.order_status === 'PAID') {
+      booking.payment_status = 'paid';
+      booking.payment_provider_ref = order_id;
+      
+      const newNotif = {
+        id: crypto.randomUUID(),
+        user_id: booking.user_id,
+        title: 'Payment Confirmed & Tickets Emailed',
+        message: `Payment of ₹${Math.round(booking.total_cents / 100).toLocaleString()} successfully processed via Cashfree. Your event tickets have been sent to ${booking.guest_email}.`,
+        read: false,
+        created_at: new Date().toISOString(),
+      };
+      db.notifications.unshift(newNotif);
+
+      const event = db.events.find((e: any) => e.id === booking.event_id);
+      if (event) {
+        await sendConfirmationEmail(booking, event).catch(err => {
+          console.error('[SMTP BACKGROUND ERROR] Cashfree verification email dispatch failed:', err);
+        });
+      }
+
+      await writeDb(db);
+      return res.json({ success: true, booking, order_status: data.order_status });
+    } else {
+      return res.status(400).json({
+        success: false,
+        error: `Payment is not completed. Cashfree status: ${data.order_status}`
+      });
+    }
   } catch (err: any) {
+    console.error('Cashfree verification exception:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Legacy Razorpay compatibility endpoints
+router.post('/:id/razorpay-order', requireAuth, async (req: AuthRequest, res: any) => {
+  return res.redirect(307, `/api/bookings/${req.params.id}/cashfree-order`);
+});
+
+router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: any) => {
+  return res.redirect(307, `/api/bookings/${req.params.id}/verify-cashfree`);
 });
 
 export default router;

@@ -28,25 +28,36 @@ export default function BookingSuccess({
       return;
     }
 
-    // Since we're logged in, fetching our bookings and finding it is the safest/simplest RLS simulation
-    apiFetch('/api/bookings/my')
-      .then((res) => {
+    const searchParams = new URLSearchParams(window.location.search);
+    const orderId = searchParams.get('order_id');
+
+    const loadAndVerify = async () => {
+      try {
+        if (orderId) {
+          await apiFetch(`/api/bookings/${bookingId}/verify-cashfree`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId })
+          }).catch((e) => console.error('Cashfree return auto-verify error:', e));
+        }
+
+        const res = await apiFetch('/api/bookings/my');
         if (!res.ok) throw new Error();
-        return res.json();
-      })
-      .then((data: Booking[]) => {
+        const data: Booking[] = await res.json();
         const found = data.find((b) => b.id === bookingId);
         if (found) {
           setBooking(found);
         } else {
           setErrorState(true);
         }
-        setIsLoading(false);
-      })
-      .catch(() => {
+      } catch {
         setErrorState(true);
+      } finally {
         setIsLoading(false);
-      });
+      }
+    };
+
+    loadAndVerify();
   }, [bookingId]);
 
   const formatDate = (dateStr: string) => {
