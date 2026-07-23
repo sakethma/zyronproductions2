@@ -1,0 +1,72 @@
+[
+  {
+    "id": "WA_TEST_1784814025920_9270",
+    "phone": "8125829270",
+    "formatted_phone": "918125829270",
+    "type": "test_trail",
+    "message": "⚡ *Zyron Productions - WhatsApp Trail Test*\n\nHello! This is an automated trail test dispatch from Zyron Productions backend system.\n\n📱 *Recipient Phone:* +918125829270\n⏰ *Timestamp:* 2026-07-23T13:40:25.920Z\n✅ *Integration Status:* Meta Cloud API Active\n\nWelcome to Zyron VIP Access!",
+    "wa_deep_link": "https://wa.me/918125829270?text=%E2%9A%A1%20*Zyron%20Productions%20-%20WhatsApp%20Trail%20Test*%0A%0AHello!%20This%20is%20an%20automated%20trail%20test%20dispatch%20from%20Zyron%20Productions%20backend%20system.%0A%0A%F0%9F%93%B1%20*Recipient%20Phone%3A*%20%2B918125829270%0A%E2%8F%B0%20*Timestamp%3A*%202026-07-23T13%3A40%3A25.920Z%0A%E2%9C%85%20*Integration%20Status%3A*%20Meta%20Cloud%20API%20Active%0A%0AWelcome%20to%20Zyron%20VIP%20Access!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:40:25.920Z"
+  },
+  {
+    "id": "WA_1784812028976_TK1145",
+    "booking_id": "b1824521-9375-49a3-a7ad-2ec4e26a9cf4",
+    "ticket_id": "TK1145",
+    "phone": "+918125829270",
+    "guest_name": "admin",
+    "message": "🎉 *Booking Confirmed! - Zyron Productions*\n\nHi *admin*, your pass for *third diminesion* has been verified & approved!\n\n🎟️ *Ticket ID:* TK1145\n📋 *Booking Ref:* B1824521\n👥 *Passes:* 1x GENERAL\n📅 *Event Date:* 2622-05-19T20:52:00.000Z\n📍 *Venue:* 5252525\n\n👇 *Download Your Digital Ticket Pass (PDF):*\nhttp://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/b1824521-9375-49a3-a7ad-2ec4e26a9cf4/download\n\nPresent your Ticket QR Code at the venue entrance for fast check-in. Welcome to Zyron!",
+    "pass_url": "http://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/b1824521-9375-49a3-a7ad-2ec4e26a9cf4/download",
+    "wa_deep_link": "https://wa.me/918125829270?text=%F0%9F%8E%89%20*Booking%20Confirmed!%20-%20Zyron%20Productions*%0A%0AHi%20*admin*%2C%20your%20pass%20for%20*third%20diminesion*%20has%20been%20verified%20%26%20approved!%0A%0A%F0%9F%8E%9F%EF%B8%8F%20*Ticket%20ID%3A*%20TK1145%0A%F0%9F%93%8B%20*Booking%20Ref%3A*%20B1824521%0A%F0%9F%91%A5%20*Passes%3A*%201x%20GENERAL%0A%F0%9F%93%85%20*Event%20Date%3A*%202622-05-19T20%3A52%3A00.000Z%0A%F0%9F%93%8D%20*Venue%3A*%205252525%0A%0A%F0%9F%91%87%20*Download%20Your%20Digital%20Ticket%20Pass%20(PDF)%3A*%0Ahttp%3A%2F%2Fais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app%2Fapi%2Ftickets%2Fb1824521-9375-49a3-a7ad-2ec4e26a9cf4%2Fdownload%0A%0APresent%20your%20Ticket%20QR%20Code%20at%20the%20venue%20entrance%20for%20fast%20check-in.%20Welcome%20to%20Zyron!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:07:08.980Z"
+  },
+  {
+    "id": "WA_1784811981573_TK9317",
+    "booking_id": "f11e31f9-b894-49c5-888d-1e7fa4b8632a",
+    "ticket_id": "TK9317",
+    "phone": "+918125829270",
+    "guest_name": "admin",
+    "message": "🎉 *Booking Confirmed! - Zyron Productions*\n\nHi *admin*, your pass for *third diminesion* has been verified & approved!\n\n🎟️ *Ticket ID:* TK9317\n📋 *Booking Ref:* F11E31F9\n👥 *Passes:* 1x GENERAL\n📅 *Event Date:* 2622-05-19T20:52:00.000Z\n📍 *Venue:* 5252525\n\n👇 *Download Your Digital Ticket Pass (PDF):*\nhttp://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/f11e31f9-b894-49c5-888d-1e7fa4b8632a/download\n\nPresent your Ticket QR Code at the venue entrance for fast check-in. Welcome to Zyron!",
+    "pass_url": "http://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/f11e31f9-b894-49c5-888d-1e7fa4b8632a/download",
+    "wa_deep_link": "https://wa.me/918125829270?text=%F0%9F%8E%89%20*Booking%20Confirmed!%20-%20Zyron%20Productions*%0A%0AHi%20*admin*%2C%20your%20pass%20for%20*third%20diminesion*%20has%20been%20verified%20%26%20approved!%0A%0A%F0%9F%8E%9F%EF%B8%8F%20*Ticket%20ID%3A*%20TK9317%0A%F0%9F%93%8B%20*Booking%20Ref%3A*%20F11E31F9%0A%F0%9F%91%A5%20*Passes%3A*%201x%20GENERAL%0A%F0%9F%93%85%20*Event%20Date%3A*%202622-05-19T20%3A52%3A00.000Z%0A%F0%9F%93%8D%20*Venue%3A*%205252525%0A%0A%F0%9F%91%87%20*Download%20Your%20Digital%20Ticket%20Pass%20(PDF)%3A*%0Ahttp%3A%2F%2Fais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app%2Fapi%2Ftickets%2Ff11e31f9-b894-49c5-888d-1e7fa4b8632a%2Fdownload%0A%0APresent%20your%20Ticket%20QR%20Code%20at%20the%20venue%20entrance%20for%20fast%20check-in.%20Welcome%20to%20Zyron!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:06:21.577Z"
+  },
+  {
+    "id": "WA_1784811916313_TK5421",
+    "booking_id": "28498327-8a0f-4fba-b921-cad4ea40493a",
+    "ticket_id": "TK5421",
+    "phone": "+918125829270",
+    "guest_name": "sakethma07",
+    "message": "🎉 *Booking Confirmed! - Zyron Productions*\n\nHi *sakethma07*, your pass for *third diminesion* has been verified & approved!\n\n🎟️ *Ticket ID:* TK5421\n📋 *Booking Ref:* 28498327\n👥 *Passes:* 1x GENERAL\n📅 *Event Date:* 2622-05-19T20:52:00.000Z\n📍 *Venue:* 5252525\n\n👇 *Download Your Digital Ticket Pass (PDF):*\nhttp://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/28498327-8a0f-4fba-b921-cad4ea40493a/download\n\nPresent your Ticket QR Code at the venue entrance for fast check-in. Welcome to Zyron!",
+    "pass_url": "http://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/28498327-8a0f-4fba-b921-cad4ea40493a/download",
+    "wa_deep_link": "https://wa.me/918125829270?text=%F0%9F%8E%89%20*Booking%20Confirmed!%20-%20Zyron%20Productions*%0A%0AHi%20*sakethma07*%2C%20your%20pass%20for%20*third%20diminesion*%20has%20been%20verified%20%26%20approved!%0A%0A%F0%9F%8E%9F%EF%B8%8F%20*Ticket%20ID%3A*%20TK5421%0A%F0%9F%93%8B%20*Booking%20Ref%3A*%2028498327%0A%F0%9F%91%A5%20*Passes%3A*%201x%20GENERAL%0A%F0%9F%93%85%20*Event%20Date%3A*%202622-05-19T20%3A52%3A00.000Z%0A%F0%9F%93%8D%20*Venue%3A*%205252525%0A%0A%F0%9F%91%87%20*Download%20Your%20Digital%20Ticket%20Pass%20(PDF)%3A*%0Ahttp%3A%2F%2Fais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app%2Fapi%2Ftickets%2F28498327-8a0f-4fba-b921-cad4ea40493a%2Fdownload%0A%0APresent%20your%20Ticket%20QR%20Code%20at%20the%20venue%20entrance%20for%20fast%20check-in.%20Welcome%20to%20Zyron!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:05:16.318Z"
+  },
+  {
+    "id": "WA_1784811914617_TK6536",
+    "booking_id": "344b71a0-e03e-4e08-bc98-2f6c076f1320",
+    "ticket_id": "TK6536",
+    "phone": "+918125829270",
+    "guest_name": "sakethma07",
+    "message": "🎉 *Booking Confirmed! - Zyron Productions*\n\nHi *sakethma07*, your pass for *third diminesion* has been verified & approved!\n\n🎟️ *Ticket ID:* TK6536\n📋 *Booking Ref:* 344B71A0\n👥 *Passes:* 1x GENERAL\n📅 *Event Date:* 2622-05-19T20:52:00.000Z\n📍 *Venue:* 5252525\n\n👇 *Download Your Digital Ticket Pass (PDF):*\nhttp://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/344b71a0-e03e-4e08-bc98-2f6c076f1320/download\n\nPresent your Ticket QR Code at the venue entrance for fast check-in. Welcome to Zyron!",
+    "pass_url": "http://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/344b71a0-e03e-4e08-bc98-2f6c076f1320/download",
+    "wa_deep_link": "https://wa.me/918125829270?text=%F0%9F%8E%89%20*Booking%20Confirmed!%20-%20Zyron%20Productions*%0A%0AHi%20*sakethma07*%2C%20your%20pass%20for%20*third%20diminesion*%20has%20been%20verified%20%26%20approved!%0A%0A%F0%9F%8E%9F%EF%B8%8F%20*Ticket%20ID%3A*%20TK6536%0A%F0%9F%93%8B%20*Booking%20Ref%3A*%20344B71A0%0A%F0%9F%91%A5%20*Passes%3A*%201x%20GENERAL%0A%F0%9F%93%85%20*Event%20Date%3A*%202622-05-19T20%3A52%3A00.000Z%0A%F0%9F%93%8D%20*Venue%3A*%205252525%0A%0A%F0%9F%91%87%20*Download%20Your%20Digital%20Ticket%20Pass%20(PDF)%3A*%0Ahttp%3A%2F%2Fais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app%2Fapi%2Ftickets%2F344b71a0-e03e-4e08-bc98-2f6c076f1320%2Fdownload%0A%0APresent%20your%20Ticket%20QR%20Code%20at%20the%20venue%20entrance%20for%20fast%20check-in.%20Welcome%20to%20Zyron!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:05:14.622Z"
+  },
+  {
+    "id": "WA_1784811913384_TK3865",
+    "booking_id": "4d8aa83f-65b2-4ae2-934e-1f5dd3d269cc",
+    "ticket_id": "TK3865",
+    "phone": "+918125829270",
+    "guest_name": "sakethma07",
+    "message": "🎉 *Booking Confirmed! - Zyron Productions*\n\nHi *sakethma07*, your pass for *third diminesion* has been verified & approved!\n\n🎟️ *Ticket ID:* TK3865\n📋 *Booking Ref:* 4D8AA83F\n👥 *Passes:* 1x GENERAL\n📅 *Event Date:* 2622-05-19T20:52:00.000Z\n📍 *Venue:* 5252525\n\n👇 *Download Your Digital Ticket Pass (PDF):*\nhttp://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/4d8aa83f-65b2-4ae2-934e-1f5dd3d269cc/download\n\nPresent your Ticket QR Code at the venue entrance for fast check-in. Welcome to Zyron!",
+    "pass_url": "http://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/4d8aa83f-65b2-4ae2-934e-1f5dd3d269cc/download",
+    "wa_deep_link": "https://wa.me/918125829270?text=%F0%9F%8E%89%20*Booking%20Confirmed!%20-%20Zyron%20Productions*%0A%0AHi%20*sakethma07*%2C%20your%20pass%20for%20*third%20diminesion*%20has%20been%20verified%20%26%20approved!%0A%0A%F0%9F%8E%9F%EF%B8%8F%20*Ticket%20ID%3A*%20TK3865%0A%F0%9F%93%8B%20*Booking%20Ref%3A*%204D8AA83F%0A%F0%9F%91%A5%20*Passes%3A*%201x%20GENERAL%0A%F0%9F%93%85%20*Event%20Date%3A*%202622-05-19T20%3A52%3A00.000Z%0A%F0%9F%93%8D%20*Venue%3A*%205252525%0A%0A%F0%9F%91%87%20*Download%20Your%20Digital%20Ticket%20Pass%20(PDF)%3A*%0Ahttp%3A%2F%2Fais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app%2Fapi%2Ftickets%2F4d8aa83f-65b2-4ae2-934e-1f5dd3d269cc%2Fdownload%0A%0APresent%20your%20Ticket%20QR%20Code%20at%20the%20venue%20entrance%20for%20fast%20check-in.%20Welcome%20to%20Zyron!",
+    "status": "simulated",
+    "sent_at": "2026-07-23T13:05:13.401Z"
+  }
+]

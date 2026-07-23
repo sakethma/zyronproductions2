@@ -6,8 +6,34 @@ import { events, bookings, galleryItems } from '../../src/db/schema.ts';
 import { requireAdmin, AuthRequest } from '../middleware/auth.ts';
 import { readDb, writeDb } from '../services/db.ts';
 import { sendConfirmationEmail } from '../services/email.ts';
+import { getWhatsAppDiagnostics, sendTestWhatsAppText } from '../services/whatsapp.ts';
 
 const router = Router();
+
+// Admin WhatsApp diagnostics
+router.get('/whatsapp/diagnostics', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const diag = await getWhatsAppDiagnostics();
+    return res.json(diag);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin WhatsApp test dispatch
+router.post('/whatsapp/test', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const { phone, message } = req.body || {};
+    const targetPhone = phone ? String(phone).trim() : '8125829270';
+    const result = await sendTestWhatsAppText(targetPhone, message);
+    return res.json({
+      message: `WhatsApp test dispatch processed for +${result.formatted_phone}`,
+      result
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
 
 // Admin events list
 router.get('/events', requireAdmin, async (req: AuthRequest, res: any) => {
@@ -143,7 +169,14 @@ router.get('/events/:id/guests', requireAdmin, async (req: AuthRequest, res: any
 router.post('/bookings/:id/checkin', requireAdmin, async (req: AuthRequest, res: any) => {
   try {
     const db = await readDb();
-    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    const searchId = req.params.id.trim();
+    const booking = db.bookings.find((b: any) => 
+      b.id === searchId || 
+      b.ticket_id === searchId ||
+      (b.ticket_id && b.ticket_id.toUpperCase() === searchId.toUpperCase()) ||
+      b.id.substring(0, 8).toUpperCase() === searchId.toUpperCase() ||
+      b.id.split('-')[0].toUpperCase() === searchId.toUpperCase()
+    );
     if (!booking) {
       return res.status(404).json({ error: 'Booking not found.' });
     }
@@ -509,27 +542,66 @@ router.post('/bookings/:id/approve', requireAdmin, async (req: AuthRequest, res:
       return res.status(400).json({ error: 'Booking is already approved and paid.' });
     }
 
-    // Generate clean Ticket ID (e.g., TK9382)
+    const event = db.events.find((e: any) => e.id === booking.event_id) || {
+      title: 'Zyron Event',
+      event_date: 'TBA',
+      location: 'Venue Coordinates'
+    };
+
+    // Assign Ticket ID provisionally for PDF/QR/Notification compilation
     const ticketNum = Math.floor(1000 + Math.random() * 9000);
-    const ticket_id = `TK${ticketNum}`;
-
-    booking.payment_status = 'paid';
+    const ticket_id = booking.ticket_id || `TK${ticketNum}`;
     booking.ticket_id = ticket_id;
-    booking.payment_provider_ref = booking.utr || `UPI_MANUAL_${ticket_id}`;
-    booking.updated_at = new Date().toISOString();
 
-    // Increment tickets sold on event
-    const event = db.events.find((e: any) => e.id === booking.event_id);
-    if (event) {
-      event.tickets_sold = (event.tickets_sold || 0) + (booking.quantity || 1);
-    }
-
-    // Construct download link
     const protocol = req.headers['x-forwarded-proto'] || 'http';
     const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
     const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
 
-    // Add user notification
+    // Step 1: Render & Validate PDF Ticket Buffer
+    const { generateTicketPdfBuffer } = await import('../services/pdf.ts');
+    const pdfBuffer = await generateTicketPdfBuffer(booking, event);
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      throw new Error('PDF ticket rendering failed: Empty buffer generated.');
+    }
+
+    // Step 2: Generate & Validate QR Code Image Data
+    const QRCode = (await import('qrcode')).default;
+    const qrData = `ZYRON-TICKET-${booking.id}`;
+    const qrDataUrl = await QRCode.toDataURL(qrData, { width: 300, margin: 1 });
+    if (!qrDataUrl || !qrDataUrl.startsWith('data:image/')) {
+      throw new Error('QR code generation failed: Invalid data URL format.');
+    }
+
+    // Step 3: Notification Dispatch (Email & WhatsApp)
+    await sendConfirmationEmail(booking, event).catch(err => {
+      console.error('[SMTP DISPATCH ERROR] Email confirmation failed:', err);
+    });
+
+    const phone = booking.guest_phone || '';
+    if (phone) {
+      const { sendWhatsAppConfirmation } = await import('../services/whatsapp.ts');
+      try {
+        const waRes = await sendWhatsAppConfirmation(booking, event, downloadUrl);
+        if (waRes.success) {
+          booking.whatsapp_status = 'sent';
+        }
+      } catch (waErr) {
+        console.error('[WhatsApp Dispatch Error]', waErr);
+      }
+    }
+
+    // Step 4: Confirm Booking in Database only after all backend tasks succeed
+    booking.payment_status = 'paid';
+    booking.payment_provider_ref = booking.utr || `UPI_MANUAL_${ticket_id}`;
+    booking.updated_at = new Date().toISOString();
+
+    if (event && event.id) {
+      const dbEvent = db.events.find((e: any) => e.id === event.id);
+      if (dbEvent) {
+        dbEvent.tickets_sold = (dbEvent.tickets_sold || 0) + (booking.quantity || 1);
+      }
+    }
+
     const shortBookingId = booking.id.substring(0, 8).toUpperCase();
     const newNotif = {
       id: crypto.randomUUID(),
@@ -542,31 +614,11 @@ router.post('/bookings/:id/approve', requireAdmin, async (req: AuthRequest, res:
     if (!db.notifications) db.notifications = [];
     db.notifications.unshift(newNotif);
 
-    // Trigger WhatsApp notification in background
-    const phone = booking.guest_phone || '';
-    if (phone) {
-      const { sendWhatsAppConfirmation } = await import('../services/whatsapp.ts');
-      sendWhatsAppConfirmation(booking, event || { title: 'Zyron Event' }, downloadUrl)
-        .then(waRes => {
-          if (waRes.success) {
-            booking.whatsapp_status = 'sent';
-            writeDb(db).catch(() => {});
-          }
-        })
-        .catch(err => console.error('[WhatsApp Background Error]', err));
-    }
-
-    // Send confirmation email in background
-    if (event) {
-      sendConfirmationEmail(booking, event).catch(err => {
-        console.error('[SMTP BACKGROUND ERROR] Admin manual approval email dispatch failed:', err);
-      });
-    }
-
     await writeDb(db);
     return res.json({ success: true, booking, ticket_id, downloadUrl });
   } catch (err: any) {
-    return res.status(500).json({ error: err.message });
+    console.error('[ADMIN APPROVE FAILURE]', err);
+    return res.status(500).json({ error: `Approval process failed: ${err.message || String(err)}` });
   }
 });
 

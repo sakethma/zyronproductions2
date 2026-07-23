@@ -6,14 +6,7 @@ export async function generateTicketPdfBuffer(booking: any, event: any): Promise
   const bookingRef = booking.id.split('-')[0].toUpperCase();
   
   // Generate QR Code as Data Buffer (PNG)
-  const qrData = JSON.stringify({
-    ticket_id: ticketId,
-    booking_id: booking.id,
-    event_id: event.id,
-    guest_name: booking.guest_name,
-    tier: booking.tier,
-    quantity: booking.quantity
-  });
+  const qrData = `ZYRON-TICKET-${booking.id}`;
 
   const qrImageBuffer = await QRCode.toBuffer(qrData, {
     width: 300,

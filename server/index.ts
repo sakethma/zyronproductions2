@@ -310,6 +310,35 @@ app.post('/api/smtp/test', async (req, res) => {
   }
 });
 
+// ------------------- WHATSAPP DIAGNOSTICS & TEST ENDPOINTS -------------------
+app.get(['/api/whatsapp/diagnostics', '/api/whatsapp/status'], async (req, res) => {
+  try {
+    const { getWhatsAppDiagnostics } = await import('./services/whatsapp.ts');
+    const diag = await getWhatsAppDiagnostics();
+    return res.json(diag);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to generate WhatsApp diagnostics.' });
+  }
+});
+
+app.post('/api/whatsapp/test', async (req, res) => {
+  try {
+    const { phone, message } = req.body || {};
+    const targetPhone = phone ? String(phone).trim() : '8125829270';
+    const { sendTestWhatsAppText } = await import('./services/whatsapp.ts');
+    
+    const result = await sendTestWhatsAppText(targetPhone, message);
+    return res.json({
+      message: `WhatsApp trail test dispatch completed for +${result.formatted_phone}`,
+      result
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      error: err.message || 'Failed to dispatch WhatsApp trail test message.'
+    });
+  }
+});
+
 app.all('/api/debug/mail-test', async (req, res) => {
   const toParam = req.query.to || req.body?.to;
   const recipient = toParam ? String(toParam).trim() : 'sakethma007@gmail.com';

@@ -1,3 +1,5 @@
+import QRCode from 'qrcode';
+
 export const cleanEnvVar = (val: string | undefined): string | undefined => {
   if (!val) return val;
   let clean = val.trim();
@@ -132,11 +134,26 @@ export async function sendConfirmationEmail(booking: any, event: any) {
     const escapedEventTitle = escapeHtml(event.title);
     const escapedGuestName = escapeHtml(booking.guest_name);
     const escapedBookingId = escapeHtml(booking.id);
-    const escapedTicketId = escapeHtml(booking.ticket_id || booking.id.substring(0, 8).toUpperCase());
+    const rawTicketId = booking.ticket_id || booking.id.substring(0, 8).toUpperCase();
+    const escapedTicketId = escapeHtml(rawTicketId);
     const escapedBookingRef = escapeHtml(booking.id.split('-')[0].toUpperCase());
     const escapedTier = escapeHtml(booking.tier.toUpperCase());
     const escapedQuantity = escapeHtml(booking.quantity);
     const escapedUtr = booking.utr ? escapeHtml(booking.utr) : '';
+
+    const qrPayload = `ZYRON-TICKET-${booking.id}`;
+    let qrCodeImgSrc = '';
+
+    try {
+      qrCodeImgSrc = await QRCode.toDataURL(qrPayload, {
+        width: 300,
+        margin: 1,
+        color: { dark: '#171717', light: '#ffffff' }
+      });
+    } catch (qrErr) {
+      console.warn('QRCode.toDataURL generation failed, using fallback QR URL:', qrErr);
+      qrCodeImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrPayload)}`;
+    }
 
     const html = `
       <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
@@ -155,8 +172,8 @@ export async function sendConfirmationEmail(booking: any, event: any) {
 
         <div style="text-align: center; margin: 32px 0;">
           <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Entry Pass QR Code</p>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${escapedTicketId}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
-          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at the venue entrance</p>
+          <img src="${qrCodeImgSrc}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 12px; background: white; display: inline-block;" />
+          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at venue entrance (Ticket ID: ${escapedTicketId})</p>
         </div>
 
         <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />

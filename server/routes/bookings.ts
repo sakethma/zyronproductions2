@@ -7,6 +7,7 @@ import { bookings, events } from '../../src/db/schema.ts';
 import { requireAuth, AuthRequest } from '../middleware/auth.ts';
 import { readDb, writeDb } from '../services/db.ts';
 import { sendConfirmationEmail } from '../services/email.ts';
+import { sendWhatsAppConfirmation } from '../services/whatsapp.ts';
 
 const router = Router();
 
@@ -302,9 +303,20 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
 
     const event = db.events.find((e: any) => e.id === booking.event_id);
     if (event) {
+      const protocol = req.headers['x-forwarded-proto'] || 'http';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+      const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
+
       sendConfirmationEmail(booking, event).catch(err => {
         console.error('[SMTP BACKGROUND ERROR] Simulated payment email dispatch failed:', err);
       });
+
+      sendWhatsAppConfirmation(booking, event, downloadUrl).then(waRes => {
+        if (waRes.success) {
+          booking.whatsapp_status = 'sent';
+          writeDb(db).catch(() => {});
+        }
+      }).catch(err => console.error('[WhatsApp Background Error]', err));
     }
 
     await writeDb(db);
@@ -341,9 +353,20 @@ router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
 
     const event = db.events.find((e: any) => e.id === booking.event_id);
     if (event) {
+      const protocol = req.headers['x-forwarded-proto'] || 'http';
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+      const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
+
       sendConfirmationEmail(booking, event).catch(err => {
         console.error('[SMTP BACKGROUND ERROR] Developer bypass email dispatch failed:', err);
       });
+
+      sendWhatsAppConfirmation(booking, event, downloadUrl).then(waRes => {
+        if (waRes.success) {
+          booking.whatsapp_status = 'sent';
+          writeDb(db).catch(() => {});
+        }
+      }).catch(err => console.error('[WhatsApp Background Error]', err));
     }
 
     await writeDb(db);
@@ -492,9 +515,20 @@ router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: a
 
       const event = db.events.find((e: any) => e.id === booking.event_id);
       if (event) {
-        await sendConfirmationEmail(booking, event).catch(err => {
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+        const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
+
+        sendConfirmationEmail(booking, event).catch(err => {
           console.error('[SMTP BACKGROUND ERROR] Cashfree verification email dispatch failed:', err);
         });
+
+        sendWhatsAppConfirmation(booking, event, downloadUrl).then(waRes => {
+          if (waRes.success) {
+            booking.whatsapp_status = 'sent';
+            writeDb(db).catch(() => {});
+          }
+        }).catch(err => console.error('[WhatsApp Background Error]', err));
       }
 
       await writeDb(db);
