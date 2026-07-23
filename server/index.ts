@@ -16,7 +16,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
 // Load environment variables
 dotenv.config();
 
-import { db as drizzleDb } from '../src/db/index.ts';
+import { db as drizzleDb, createPool } from '../src/db/index.ts';
 import { users, galleryItems } from '../src/db/schema.ts';
 import { eq } from 'drizzle-orm';
 
@@ -57,15 +57,129 @@ async function initDb() {
   if (hasSql) {
     try {
       console.log('Running pending database migrations...');
-      await migrate(drizzleDb, { migrationsFolder: './drizzle' });
+      const migrationsFolder = path.join(process.cwd(), 'drizzle');
+      await migrate(drizzleDb, { migrationsFolder });
       console.log('Database migrations completed successfully!');
     } catch (err: any) {
-      const errMsg = err.message || '';
+      const errMsg = err?.message || '';
       if (errMsg.includes('permission denied') || errMsg.includes('CREATE SCHEMA')) {
         console.log('Note: Database schema is managed by the platform. Skipping local migration metadata table creation.');
       } else {
         console.log('Database migrator notice:', errMsg || err);
       }
+    }
+
+    // Direct Schema Safety Sync (Ensures all tables & missing columns exist on Render/Neon/Cloud PostgreSQL)
+    try {
+      const pool = createPool();
+      if (pool) {
+        const client = await pool.connect();
+        try {
+          await client.query(`
+            CREATE TABLE IF NOT EXISTS users (
+              id SERIAL PRIMARY KEY,
+              uid TEXT NOT NULL UNIQUE,
+              email TEXT NOT NULL,
+              role TEXT NOT NULL DEFAULT 'user',
+              password_hash TEXT,
+              created_at TIMESTAMP DEFAULT NOW()
+            );
+
+            CREATE TABLE IF NOT EXISTS events (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              slug TEXT NOT NULL UNIQUE,
+              teaser TEXT NOT NULL,
+              description TEXT NOT NULL,
+              event_date TEXT NOT NULL,
+              location TEXT NOT NULL,
+              image_url TEXT NOT NULL,
+              capacity INTEGER NOT NULL,
+              tickets_sold INTEGER NOT NULL DEFAULT 0,
+              general_price_cents INTEGER NOT NULL,
+              vip_price_cents INTEGER NOT NULL,
+              group_price_cents INTEGER NOT NULL,
+              earlybird_price_cents INTEGER NOT NULL,
+              couple_price_cents INTEGER NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS bookings (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              event_id TEXT NOT NULL,
+              tier TEXT NOT NULL,
+              quantity INTEGER NOT NULL,
+              guest_name TEXT NOT NULL,
+              guest_email TEXT NOT NULL,
+              guest_phone TEXT,
+              guest_instagram TEXT,
+              total_cents INTEGER NOT NULL,
+              payment_status TEXT NOT NULL,
+              payment_provider_ref TEXT,
+              dietary TEXT,
+              role_preference TEXT,
+              accessibility TEXT,
+              cancelled_at TEXT,
+              checked_in BOOLEAN NOT NULL DEFAULT FALSE,
+              checked_in_at TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS gallery_items (
+              id TEXT PRIMARY KEY,
+              image_url TEXT NOT NULL,
+              caption TEXT,
+              event_id TEXT,
+              sort_order INTEGER NOT NULL,
+              created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL,
+              title TEXT NOT NULL,
+              message TEXT NOT NULL,
+              read BOOLEAN NOT NULL DEFAULT FALSE,
+              created_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS coupons (
+              id TEXT PRIMARY KEY,
+              code TEXT NOT NULL UNIQUE,
+              discount_type TEXT NOT NULL,
+              discount_value INTEGER NOT NULL,
+              max_uses INTEGER,
+              uses INTEGER NOT NULL DEFAULT 0,
+              event_id TEXT,
+              active BOOLEAN NOT NULL DEFAULT TRUE,
+              created_at TEXT NOT NULL
+            );
+
+            -- Ensure all new columns exist on existing tables (Safe idempotent ALTERs)
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_id TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS utr TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_proof_url TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ocr_detected_utr TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ocr_detected_amount INTEGER;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS whatsapp_status TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent BOOLEAN DEFAULT FALSE NOT NULL;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS coupon_code TEXT;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_cents INTEGER;
+          `);
+          console.log('Database schema safety sync executed successfully!');
+        } finally {
+          client.release();
+          await pool.end().catch(() => {});
+        }
+      }
+    } catch (syncErr: any) {
+      console.error('Schema safety sync notice:', syncErr?.message || syncErr);
     }
   }
 }
