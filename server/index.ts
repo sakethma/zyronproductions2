@@ -122,6 +122,7 @@ async function initDb() {
               dietary TEXT,
               role_preference TEXT,
               accessibility TEXT,
+              additional_guests TEXT,
               cancelled_at TEXT,
               checked_in BOOLEAN NOT NULL DEFAULT FALSE,
               checked_in_at TEXT,
@@ -171,6 +172,7 @@ async function initDb() {
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS reminder_sent_at TEXT;
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS coupon_code TEXT;
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_cents INTEGER;
+            ALTER TABLE bookings ADD COLUMN IF NOT EXISTS additional_guests TEXT;
           `);
           console.log('Database schema safety sync executed successfully!');
         } finally {
