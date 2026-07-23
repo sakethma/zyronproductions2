@@ -580,10 +580,14 @@ router.post('/:id/submit-proof', requireAuth, async (req: AuthRequest, res: any)
     let ocrDetectedAmount = Math.round(booking.total_cents / 100);
 
     if (screenshot && typeof screenshot === 'string') {
-      const { scanPaymentProofImage } = await import('../services/ocr.ts');
-      const ocrRes = await scanPaymentProofImage(screenshot);
-      if (ocrRes.detectedUtr) ocrDetectedUtr = ocrRes.detectedUtr;
-      if (ocrRes.detectedAmountCents) ocrDetectedAmount = Math.round(ocrRes.detectedAmountCents / 100);
+      try {
+        const { scanPaymentProofImage } = await import('../services/ocr.ts');
+        const ocrRes = await scanPaymentProofImage(screenshot);
+        if (ocrRes.detectedUtr) ocrDetectedUtr = ocrRes.detectedUtr;
+        if (ocrRes.detectedAmountCents) ocrDetectedAmount = Math.round(ocrRes.detectedAmountCents / 100);
+      } catch (ocrErr) {
+        console.warn('OCR scan notice:', ocrErr);
+      }
     }
 
     booking.utr = cleanedUtr;

@@ -32,7 +32,8 @@ import { sendMail, brevoApiKey } from './services/email.ts';
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-app.use(express.json({ type: ['application/json', 'text/plain'] }));
+app.use(express.json({ limit: '25mb', type: ['application/json', 'text/plain'] }));
+app.use(express.urlencoded({ limit: '25mb', extended: true }));
 
 function getCookieSecret(): string {
   const envSecret = process.env.COOKIE_SECRET;
@@ -591,6 +592,15 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
 });
 
 import { startReminderScheduler } from './services/reminder.ts';
+
+// ------------------- API ERROR HANDLER -------------------
+app.use('/api', (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('API Error:', err);
+  const status = err.status || err.statusCode || 500;
+  return res.status(status).json({
+    error: err.message || 'An unexpected server error occurred.'
+  });
+});
 
 // ------------------- VITE & STATIC SERVING -------------------
 async function startServer() {
