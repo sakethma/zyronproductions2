@@ -61,6 +61,7 @@ export const bookings = pgTable('bookings', {
   checked_in_at: text('checked_in_at'),
   coupon_code: text('coupon_code'),
   discount_cents: integer('discount_cents'),
+  additional_guests: text('additional_guests'),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
 });

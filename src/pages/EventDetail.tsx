@@ -10,7 +10,6 @@ import { Event, TicketTier, User, Booking } from '../types';
 import { apiFetch } from '../lib/api';
 import LoadingOverlay from '../components/LoadingOverlay';
 import UPIPaymentModal from '../components/UPIPaymentModal';
-import SocialShare from '../components/SocialShare';
 
 interface EventDetailProps {
   slug: string;
@@ -24,6 +23,7 @@ interface EventDetailProps {
     guest_phone?: string;
     guest_instagram?: string;
     coupon_code?: string;
+    additional_guests?: string;
   }) => Promise<any>;
   setCurrentRoute: (route: string) => void;
   events: Event[];
@@ -51,9 +51,24 @@ export default function EventDetail({
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [guestInstagram, setGuestInstagram] = useState('');
+  const [additionalGuestNames, setAdditionalGuestNames] = useState<string[]>([]);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [hasPrefilled, setHasPrefilled] = useState(false);
   const [upiModalBooking, setUpiModalBooking] = useState<Booking | null>(null);
+
+  useEffect(() => {
+    if (quantity > 1) {
+      setAdditionalGuestNames((prev) => {
+        const next = [...prev];
+        while (next.length < quantity - 1) {
+          next.push('');
+        }
+        return next.slice(0, quantity - 1);
+      });
+    } else {
+      setAdditionalGuestNames([]);
+    }
+  }, [quantity]);
 
   // Coupon application state
   const [couponInput, setCouponInput] = useState('');
@@ -258,10 +273,20 @@ export default function EventDetail({
       return;
     }
 
+    if (quantity > 1) {
+      const missingGuest = additionalGuestNames.some((n) => !n.trim());
+      if (missingGuest) {
+        setErrorMsg(`Please enter full names for all ${quantity - 1} additional guest(s) for verification.`);
+        return;
+      }
+    }
+
     if (!termsAccepted) {
       setErrorMsg('You must accept the terms and conditions to proceed.');
       return;
     }
+
+    const additionalGuestsStr = additionalGuestNames.map((n) => n.trim()).filter(Boolean).join(', ');
 
     if (!user) {
       // Save form state to localStorage first
@@ -272,6 +297,7 @@ export default function EventDetail({
         guest_email: guestEmail.trim(),
         guest_phone: guestPhone.trim(),
         guest_instagram: guestInstagram.trim(),
+        additional_guests: additionalGuestsStr,
       };
       localStorage.setItem(`pending_booking_${event.id}`, JSON.stringify(pendingData));
       
@@ -290,6 +316,7 @@ export default function EventDetail({
         guest_email: guestEmail.trim(),
         guest_phone: guestPhone.trim(),
         guest_instagram: guestInstagram.trim(),
+        additional_guests: additionalGuestsStr,
         coupon_code: appliedCoupon ? appliedCoupon.code : undefined,
       });
 
@@ -375,9 +402,6 @@ export default function EventDetail({
               <p key={i}>{para}</p>
             ))}
           </div>
-
-          {/* Social Sharing & Viral Marketing Bar */}
-          <SocialShare eventTitle={event.title} teaser={event.teaser} eventSlug={event.slug} />
         </div>
 
         {/* Right Aspect - Hero Image Banner */}
@@ -562,6 +586,34 @@ export default function EventDetail({
                         className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm text-neutral-800 dark:text-white rounded-none focus:border-neutral-900 dark:focus:border-white outline-none"
                       />
                     </div>
+
+                    {quantity > 1 && (
+                      <div className="space-y-3 pt-3 border-t border-neutral-100 dark:border-neutral-900">
+                        <label id="label-additional-guests-title" className="text-[11px] font-mono text-neutral-400 uppercase block font-semibold tracking-wider">
+                          ADDITIONAL GUEST NAMES ({quantity - 1} REQUIRED FOR VERIFICATION) *
+                        </label>
+                        {Array.from({ length: quantity - 1 }).map((_, idx) => (
+                          <div key={idx} className="space-y-1">
+                            <label id={`label-guest-${idx + 2}`} className="text-[10px] font-mono text-neutral-400 uppercase">
+                              GUEST {idx + 2} FULL NAME *
+                            </label>
+                            <input
+                              id={`input-guest-${idx + 2}`}
+                              type="text"
+                              required
+                              value={additionalGuestNames[idx] || ''}
+                              onChange={(e) => {
+                                const updated = [...additionalGuestNames];
+                                updated[idx] = e.target.value;
+                                setAdditionalGuestNames(updated);
+                              }}
+                              placeholder={`Full name for Attendee ${idx + 2}`}
+                              className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-sm text-neutral-800 dark:text-white rounded-none focus:border-neutral-900 dark:focus:border-white outline-none"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 

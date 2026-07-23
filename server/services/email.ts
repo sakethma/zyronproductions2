@@ -129,57 +129,160 @@ function escapeHtml(unsafe: any): string {
     .replace(/'/g, "&#039;");
 }
 
-export async function sendConfirmationEmail(booking: any, event: any) {
+export async function sendConfirmationEmail(booking: any, event: any, downloadUrl?: string) {
   try {
-    const escapedEventTitle = escapeHtml(event.title);
-    const escapedGuestName = escapeHtml(booking.guest_name);
-    const escapedBookingId = escapeHtml(booking.id);
-    const rawTicketId = booking.ticket_id || booking.id.substring(0, 8).toUpperCase();
+    const escapedEventTitle = escapeHtml(event?.title || 'Zyron Event');
+    const escapedGuestName = escapeHtml(booking?.guest_name || 'VIP Guest');
+    const escapedBookingId = escapeHtml(booking?.id || '');
+    const rawTicketId = booking?.ticket_id || (booking?.id ? booking.id.substring(0, 8).toUpperCase() : 'TK0000');
     const escapedTicketId = escapeHtml(rawTicketId);
-    const escapedBookingRef = escapeHtml(booking.id.split('-')[0].toUpperCase());
-    const escapedTier = escapeHtml(booking.tier.toUpperCase());
-    const escapedQuantity = escapeHtml(booking.quantity);
-    const escapedUtr = booking.utr ? escapeHtml(booking.utr) : '';
+    const escapedBookingRef = escapeHtml(booking?.id ? booking.id.split('-')[0].toUpperCase() : 'ZYRON');
+    const escapedTier = escapeHtml((booking?.tier || 'GENERAL').toUpperCase());
+    const escapedQuantity = escapeHtml(booking?.quantity || 1);
+    const escapedUtr = booking?.utr ? escapeHtml(booking.utr) : (booking?.payment_provider_ref ? escapeHtml(booking.payment_provider_ref) : '');
+    const escapedVenue = event?.location ? escapeHtml(event.location) : 'Venue Coordinates (Dispatched 24h prior)';
+    const formattedDate = event?.event_date ? new Date(event.event_date).toLocaleString('en-IN', { dateStyle: 'full', timeStyle: 'short' }) : 'To Be Announced';
+
+    const pdfDownloadUrl = downloadUrl || `https://ais-dev-tbqq7zl3tdwceaxtc2cmlj-296496770216.asia-southeast1.run.app/api/tickets/${escapedBookingId}/download`;
 
     const qrPayload = `ZYRON-TICKET-${booking.id}`;
-    let qrCodeImgSrc = '';
-
-    try {
-      qrCodeImgSrc = await QRCode.toDataURL(qrPayload, {
-        width: 300,
-        margin: 1,
-        color: { dark: '#171717', light: '#ffffff' }
-      });
-    } catch (qrErr) {
-      console.warn('QRCode.toDataURL generation failed, using fallback QR URL:', qrErr);
-      qrCodeImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrPayload)}`;
-    }
+    // Use reliable HTTPS QR server URL to bypass Gmail/mobile mail client data URL blocking
+    const qrCodeImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(qrPayload)}&color=000000&bgcolor=ffffff`;
 
     const html = `
-      <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
-        <h1 style="color: #7c3aed; text-align: center; margin-bottom: 24px; font-family: serif;">Congratulations! 🎉</h1>
-        <p style="font-size: 16px; text-align: center; margin-bottom: 32px; font-weight: bold;">Your spot at ${escapedEventTitle} is officially verified and secured.</p>
-        
-        <div style="background-color: white; padding: 20px; border: 1px solid #e5e5e5; margin-bottom: 24px;">
-          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; font-size: 14px; margin-top: 0; color: #737373;">Admission Ticket</h2>
-          <p style="margin: 8px 0;">Ticket ID: <strong style="color: #7c3aed; font-size: 16px;">${escapedTicketId}</strong></p>
-          <p style="margin: 8px 0;">Booking Ref: <strong>${escapedBookingRef}</strong></p>
-          ${escapedUtr ? `<p style="margin: 8px 0;">Payment UTR: <strong>${escapedUtr}</strong></p>` : ''}
-          <p style="margin: 8px 0;">Event: <strong>${escapedEventTitle}</strong></p>
-          <p style="margin: 8px 0;">Guest: <strong>${escapedGuestName}</strong></p>
-          <p style="margin: 8px 0;">Passes: <strong>${escapedQuantity}x ${escapedTier}</strong></p>
-        </div>
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Booking Confirmed - Zyron Productions</title>
+      </head>
+      <body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; -webkit-font-smoothing: antialiased;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #09090b; padding: 32px 16px;">
+          <tr>
+            <td align="center">
+              <!-- Main Email Container Card -->
+              <table role="presentation" width="100%" style="max-width: 580px; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #a855f7; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);">
+                
+                <!-- Branding Header -->
+                <tr>
+                  <td style="padding: 32px 28px 20px 28px; text-align: center; background-color: #0d0d10; border-bottom: 1px solid #1f1f23;">
+                    <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #c084fc; letter-spacing: 4px; text-transform: uppercase;">ZYRON PRODUCTIONS</div>
+                    <div style="font-family: monospace; font-size: 10px; color: #71717a; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;">Live Electronic Music & Modular Installations</div>
+                  </td>
+                </tr>
 
-        <div style="text-align: center; margin: 32px 0;">
-          <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Entry Pass QR Code</p>
-          <img src="${qrCodeImgSrc}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 12px; background: white; display: inline-block;" />
-          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at venue entrance (Ticket ID: ${escapedTicketId})</p>
-        </div>
+                <!-- Status Banner -->
+                <tr>
+                  <td style="padding: 24px 28px 12px 28px; text-align: center;">
+                    <div style="display: inline-block; background-color: #2e1065; color: #d8b4fe; border: 1px solid #7e22ce; padding: 6px 16px; border-radius: 9999px; font-family: monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                      ✓ Admission Confirmed & Approved
+                    </div>
+                    <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 22px; font-weight: 700; font-family: Georgia, serif; line-height: 1.3;">
+                      Congratulations, ${escapedGuestName}! 🎉
+                    </h1>
+                    <p style="margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5;">
+                      Your entry pass for <strong style="color: #e4e4e7;">${escapedEventTitle}</strong> has been officially verified and issued.
+                    </p>
+                  </td>
+                </tr>
 
-        <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />
-        <p style="font-size: 12px; color: #737373; line-height: 1.6;">Your secret coordinates and structural protocols will be sent 24 hours prior to the experience. Stay tuned.</p>
-        <p style="font-size: 12px; color: #737373; margin-top: 16px;">Need assistance? Reach out at zyroninbox@gmail.com</p>
-      </div>
+                <!-- Ticket Details Card -->
+                <tr>
+                  <td style="padding: 16px 28px;">
+                    <table role="presentation" width="100%" style="background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px;">
+                      <tr>
+                        <td>
+                          <div style="font-family: monospace; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px; border-bottom: 1px solid #27272a; font-weight: 700;">
+                            Official Admission Credential
+                          </div>
+                          
+                          <table role="presentation" width="100%" style="margin-top: 14px; font-size: 13px; line-height: 1.8;">
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace; width: 35%;">TICKET ID:</td>
+                              <td style="color: #c084fc; font-family: monospace; font-weight: 800; font-size: 16px;">${escapedTicketId}</td>
+                            </tr>
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">BOOKING REF:</td>
+                              <td style="color: #f4f4f5; font-family: monospace; font-weight: 700;">${escapedBookingRef}</td>
+                            </tr>
+                            ${escapedUtr ? `
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">PAYMENT UTR:</td>
+                              <td style="color: #a1a1aa; font-family: monospace;">${escapedUtr}</td>
+                            </tr>` : ''}
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">EVENT:</td>
+                              <td style="color: #ffffff; font-weight: 700;">${escapedEventTitle}</td>
+                            </tr>
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">GUEST NAME:</td>
+                              <td style="color: #e4e4e7;">${escapedGuestName}</td>
+                            </tr>
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">PASSES:</td>
+                              <td style="color: #38bdf8; font-family: monospace; font-weight: 700;">${escapedQuantity}x ${escapedTier} PASS</td>
+                            </tr>
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">EVENT DATE:</td>
+                              <td style="color: #e4e4e7;">${formattedDate}</td>
+                            </tr>
+                            <tr>
+                              <td style="color: #71717a; font-family: monospace;">VENUE:</td>
+                              <td style="color: #e4e4e7;">${escapedVenue}</td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- QR Code Display Box -->
+                <tr>
+                  <td style="padding: 12px 28px 24px 28px; text-align: center;">
+                    <div style="font-family: monospace; font-size: 11px; font-weight: 700; color: #d4d4d8; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px;">
+                      ENTRY PASS SCANNER QR CODE
+                    </div>
+                    
+                    <!-- High contrast crisp white wrapper box so QR code scans cleanly in all mail clients -->
+                    <div style="display: inline-block; background-color: #ffffff; padding: 16px; border-radius: 12px; border: 1px solid #3f3f46; box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);">
+                      <img src="${qrCodeImgSrc}" alt="Ticket Entry QR Code" width="200" height="200" style="display: block; width: 200px; height: 200px; border: none; outline: none;" />
+                    </div>
+
+                    <p style="margin: 14px 0 0 0; font-family: monospace; font-size: 10px; color: #71717a; text-transform: uppercase; letter-spacing: 1px;">
+                      Present this QR code at venue entrance for instant priority entry (Ticket ID: ${escapedTicketId})
+                    </p>
+                  </td>
+                </tr>
+
+                <!-- Action Button: Download PDF Ticket -->
+                <tr>
+                  <td style="padding: 0 28px 28px 28px; text-align: center;">
+                    <a href="${pdfDownloadUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%); color: #ffffff; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 12px; font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.45); transition: all 0.2s ease;">
+                      ↓ DOWNLOAD DIGITAL PASS (PDF)
+                    </a>
+                  </td>
+                </tr>
+
+                <!-- Footer Divider & Instructions -->
+                <tr>
+                  <td style="padding: 24px 28px; background-color: #0d0d10; border-top: 1px solid #1f1f23; text-align: center;">
+                    <p style="margin: 0 0 8px 0; font-size: 11px; color: #a1a1aa; line-height: 1.6; font-family: monospace;">
+                      📍 Secret venue coordinates & access instructions will be dispatched 24 hours prior to the experience.
+                    </p>
+                    <p style="margin: 0; font-size: 10px; color: #71717a; font-family: monospace;">
+                      Need support? Reach out at <a href="mailto:zyroninbox@gmail.com" style="color: #c084fc; text-decoration: none;">zyroninbox@gmail.com</a> • Zyron Productions
+                    </p>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
     `;
 
     const result = await sendMail({

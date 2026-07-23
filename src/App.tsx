@@ -176,6 +176,7 @@ export default function App() {
     guest_phone: string;
     guest_instagram?: string;
     coupon_code?: string;
+    additional_guests?: string;
   }) => {
     const response = await apiFetch('/api/bookings', {
       method: 'POST',

@@ -53,6 +53,7 @@ export interface Booking {
   dietary?: string;
   role_preference?: string;
   accessibility?: string;
+  additional_guests?: string;
   cancelled_at?: string;
   checked_in?: boolean;
   checked_in_at?: string;

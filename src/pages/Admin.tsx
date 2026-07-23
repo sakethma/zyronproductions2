@@ -1254,6 +1254,11 @@ export default function Admin({
                         <div>
                           <span className="text-neutral-400 block text-[10px] uppercase">GUEST NAME</span>
                           <span className="font-semibold text-neutral-900 dark:text-white">{bk.guest_name}</span>
+                          {bk.additional_guests && (
+                            <p className="text-[10px] text-neutral-500 font-normal mt-0.5">
+                              + Additional: <span className="text-neutral-800 dark:text-neutral-200 font-medium">{bk.additional_guests}</span>
+                            </p>
+                          )}
                         </div>
                         <div>
                           <span className="text-neutral-400 block text-[10px] uppercase">PHONE</span>
@@ -1851,6 +1856,11 @@ export default function Admin({
                         <td className="py-4">
                           <span className="font-bold text-neutral-950 dark:text-white">{g.id.split('-')[0].toUpperCase()}</span>
                           <p className="font-sans font-medium text-[11px] text-neutral-500 mt-0.5">{g.guest_name}</p>
+                          {g.additional_guests && (
+                            <p className="text-[10px] text-neutral-400 font-mono mt-0.5">
+                              + Guests: {g.additional_guests}
+                            </p>
+                          )}
                         </td>
                         <td className="py-4">
                           <p>{g.guest_email}</p>

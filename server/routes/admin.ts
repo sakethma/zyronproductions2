@@ -573,7 +573,7 @@ router.post('/bookings/:id/approve', requireAdmin, async (req: AuthRequest, res:
     }
 
     // Step 3: Notification Dispatch (Email & WhatsApp)
-    await sendConfirmationEmail(booking, event).catch(err => {
+    await sendConfirmationEmail(booking, event, downloadUrl).catch(err => {
       console.error('[SMTP DISPATCH ERROR] Email confirmation failed:', err);
     });
 
@@ -697,7 +697,7 @@ router.post('/auto-approve', requireAdmin, async (req: AuthRequest, res: any) =>
 
         // Send Email
         if (event) {
-          sendConfirmationEmail(booking, event).catch(() => {});
+          sendConfirmationEmail(booking, event, downloadUrl).catch(() => {});
         }
 
         approvedCount++;
@@ -824,7 +824,7 @@ router.post('/bookings/bulk-approve', requireAdmin, async (req: AuthRequest, res
 
       // Send Email
       if (event) {
-        sendConfirmationEmail(booking, event).catch(() => {});
+        sendConfirmationEmail(booking, event, downloadUrl).catch(() => {});
       }
 
       approvedCount++;

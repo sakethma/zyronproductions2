@@ -106,12 +106,13 @@ router.post('/validate-coupon', requireAuth, async (req: AuthRequest, res: any) 
 
 // Create booking
 router.post('/', requireAuth, async (req: AuthRequest, res) => {
-  let { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram, coupon_code } = req.body;
+  let { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram, coupon_code, additional_guests } = req.body;
   event_id = typeof event_id === 'string' ? event_id.trim() : event_id;
   tier = typeof tier === 'string' ? tier.trim() : tier;
   guest_name = typeof guest_name === 'string' ? guest_name.trim() : guest_name;
   guest_email = typeof guest_email === 'string' ? guest_email.trim() : guest_email;
   guest_phone = typeof guest_phone === 'string' ? guest_phone.trim() : guest_phone;
+  additional_guests = typeof additional_guests === 'string' ? additional_guests.trim() : (Array.isArray(additional_guests) ? additional_guests.filter(Boolean).join(', ') : '');
 
   if (!event_id || !tier || !quantity || !guest_name || !guest_email || !guest_phone) {
     return res.status(400).json({ error: 'All primary booking fields including phone are required.' });
@@ -200,6 +201,7 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       dietary: '',
       role_preference: '',
       accessibility: '',
+      additional_guests: additional_guests || '',
       cancelled_at: null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -307,7 +309,7 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
       const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
       const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
 
-      sendConfirmationEmail(booking, event).catch(err => {
+      sendConfirmationEmail(booking, event, downloadUrl).catch(err => {
         console.error('[SMTP BACKGROUND ERROR] Simulated payment email dispatch failed:', err);
       });
 
@@ -357,7 +359,7 @@ router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
       const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
       const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
 
-      sendConfirmationEmail(booking, event).catch(err => {
+      sendConfirmationEmail(booking, event, downloadUrl).catch(err => {
         console.error('[SMTP BACKGROUND ERROR] Developer bypass email dispatch failed:', err);
       });
 
@@ -519,7 +521,7 @@ router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: a
         const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
         const downloadUrl = `${protocol}://${host}/api/tickets/${booking.id}/download`;
 
-        sendConfirmationEmail(booking, event).catch(err => {
+        sendConfirmationEmail(booking, event, downloadUrl).catch(err => {
           console.error('[SMTP BACKGROUND ERROR] Cashfree verification email dispatch failed:', err);
         });
 
