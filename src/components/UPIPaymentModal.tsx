@@ -21,13 +21,16 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const upiId = 'zyronproductions@ybl';
+  const upiId = 'zyronproductions@axl';
   const payeeName = 'ZYRON PRODUCTIONS';
   const amountRs = Math.round(booking.total_cents / 100);
   const bookingDisplayId = booking.id.length > 10 ? `EVT${booking.id.substring(0, 6).toUpperCase()}` : booking.id.toUpperCase();
+  const passTierName = (booking.tier || 'GENERAL').toUpperCase();
+  const passQuantity = booking.quantity || 1;
 
-  // Dynamic PhonePe & UPI Payment payload string
-  const upiPayload = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amountRs}&tr=${bookingDisplayId}&cu=INR`;
+  // Dynamic PhonePe & UPI Payment payload string matching selected pass amount
+  const noteText = `Zyron ${passTierName} Pass x${passQuantity}`;
+  const upiPayload = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amountRs}&tr=${bookingDisplayId}&tn=${encodeURIComponent(noteText)}&cu=INR`;
 
   const copyUpiId = () => {
     navigator.clipboard.writeText(upiId);
@@ -115,10 +118,16 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
               <p className="text-sm text-neutral-400 font-light">{booking.event_title || 'Event Pass Access'}</p>
             </div>
 
-            {/* Price Box */}
-            <div className="flex items-center justify-between p-3.5 bg-neutral-950 border border-neutral-800 rounded-xl">
-              <span className="text-xs uppercase font-mono text-neutral-400">Total Payable</span>
-              <span className="text-xl font-mono font-bold text-emerald-400">₹{amountRs.toLocaleString()}</span>
+            {/* Selected Pass Summary & Price Box */}
+            <div className="p-3.5 bg-neutral-950 border border-neutral-800 rounded-xl space-y-2">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-neutral-400 uppercase">Selected Pass</span>
+                <span className="text-purple-300 font-bold uppercase">{passQuantity}x {passTierName} PASS</span>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-neutral-800">
+                <span className="text-xs uppercase font-mono text-neutral-400">Total Amount</span>
+                <span className="text-xl font-mono font-bold text-emerald-400">₹{amountRs.toLocaleString()}</span>
+              </div>
             </div>
 
             {/* PhonePe Style Payment Poster Display */}
