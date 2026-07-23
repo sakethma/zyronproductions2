@@ -132,27 +132,31 @@ export async function sendConfirmationEmail(booking: any, event: any) {
     const escapedEventTitle = escapeHtml(event.title);
     const escapedGuestName = escapeHtml(booking.guest_name);
     const escapedBookingId = escapeHtml(booking.id);
+    const escapedTicketId = escapeHtml(booking.ticket_id || booking.id.substring(0, 8).toUpperCase());
     const escapedBookingRef = escapeHtml(booking.id.split('-')[0].toUpperCase());
     const escapedTier = escapeHtml(booking.tier.toUpperCase());
     const escapedQuantity = escapeHtml(booking.quantity);
+    const escapedUtr = booking.utr ? escapeHtml(booking.utr) : '';
 
     const html = `
       <div style="font-family: monospace; color: #171717; background-color: #fafafa; padding: 24px; max-width: 600px; margin: 0 auto; border: 1px solid #e5e5e5;">
         <h1 style="color: #7c3aed; text-align: center; margin-bottom: 24px; font-family: serif;">Congratulations! 🎉</h1>
-        <p style="font-size: 16px; text-align: center; margin-bottom: 32px; font-weight: bold;">Your spot at ${escapedEventTitle} is officially secured.</p>
+        <p style="font-size: 16px; text-align: center; margin-bottom: 32px; font-weight: bold;">Your spot at ${escapedEventTitle} is officially verified and secured.</p>
         
         <div style="background-color: white; padding: 20px; border: 1px solid #e5e5e5; margin-bottom: 24px;">
-          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; font-size: 14px; margin-top: 0; color: #737373;">Admission Details</h2>
-          <p style="margin: 8px 0;">Booking Ref: <strong style="color: #7c3aed;">${escapedBookingRef}</strong></p>
+          <h2 style="text-transform: uppercase; border-bottom: 1px solid #e5e5e5; padding-bottom: 12px; font-size: 14px; margin-top: 0; color: #737373;">Admission Ticket</h2>
+          <p style="margin: 8px 0;">Ticket ID: <strong style="color: #7c3aed; font-size: 16px;">${escapedTicketId}</strong></p>
+          <p style="margin: 8px 0;">Booking Ref: <strong>${escapedBookingRef}</strong></p>
+          ${escapedUtr ? `<p style="margin: 8px 0;">Payment UTR: <strong>${escapedUtr}</strong></p>` : ''}
           <p style="margin: 8px 0;">Event: <strong>${escapedEventTitle}</strong></p>
           <p style="margin: 8px 0;">Guest: <strong>${escapedGuestName}</strong></p>
           <p style="margin: 8px 0;">Passes: <strong>${escapedQuantity}x ${escapedTier}</strong></p>
         </div>
 
         <div style="text-align: center; margin: 32px 0;">
-          <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Digital Entry Pass</p>
-          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${escapedBookingId}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
-          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at the gate</p>
+          <p style="margin-bottom: 16px; font-weight: bold; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Your Entry Pass QR Code</p>
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=ZYRON-TICKET-${escapedTicketId}" alt="Ticket QR Code" style="width: 200px; height: 200px; border: 1px solid #e5e5e5; padding: 16px; background: white;" />
+          <p style="font-size: 10px; color: #737373; text-transform: uppercase; margin-top: 12px;">Present this QR code for priority admission at the venue entrance</p>
         </div>
 
         <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 32px 0;" />

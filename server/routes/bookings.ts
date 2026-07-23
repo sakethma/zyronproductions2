@@ -520,4 +520,90 @@ router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: a
   return res.redirect(307, `/api/bookings/${req.params.id}/verify-cashfree`);
 });
 
+// Submit UPI Payment Proof (UTR + Screenshot) for Manual Review
+router.post('/:id/submit-proof', requireAuth, async (req: AuthRequest, res: any) => {
+  const { utr, screenshot, guest_name, guest_email, guest_phone } = req.body;
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+
+    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Forbidden.' });
+    }
+
+    if (!utr || typeof utr !== 'string' || utr.trim().length < 6) {
+      return res.status(400).json({ error: 'Please enter a valid UTR / Transaction Reference Number.' });
+    }
+
+    const cleanedUtr = utr.trim();
+
+    let ocrDetectedUtr = cleanedUtr;
+    let ocrDetectedAmount = Math.round(booking.total_cents / 100);
+
+    if (screenshot && typeof screenshot === 'string') {
+      const { scanPaymentProofImage } = await import('../services/ocr.ts');
+      const ocrRes = await scanPaymentProofImage(screenshot);
+      if (ocrRes.detectedUtr) ocrDetectedUtr = ocrRes.detectedUtr;
+      if (ocrRes.detectedAmountCents) ocrDetectedAmount = Math.round(ocrRes.detectedAmountCents / 100);
+    }
+
+    booking.utr = cleanedUtr;
+    booking.payment_proof_url = screenshot || '';
+    booking.ocr_detected_utr = ocrDetectedUtr;
+    booking.ocr_detected_amount = ocrDetectedAmount;
+    booking.payment_status = 'pending_verification';
+    if (guest_name) booking.guest_name = guest_name;
+    if (guest_email) booking.guest_email = guest_email;
+    if (guest_phone) booking.guest_phone = guest_phone;
+    booking.updated_at = new Date().toISOString();
+
+    const shortId = booking.id.substring(0, 8).toUpperCase();
+    const newNotif = {
+      id: crypto.randomUUID(),
+      user_id: booking.user_id,
+      title: 'Payment Proof Submitted',
+      message: `Your payment proof (UTR: ${cleanedUtr}) for Booking #${shortId} has been submitted. Status: Pending Admin Verification.`,
+      read: false,
+      created_at: new Date().toISOString(),
+    };
+    if (!db.notifications) db.notifications = [];
+    db.notifications.unshift(newNotif);
+
+    await writeDb(db);
+    return res.json({ success: true, booking });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Download Digital PDF Ticket Pass
+router.get('/:id/pdf', async (req, res: any) => {
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id);
+    if (!booking) {
+      return res.status(404).send('Booking not found');
+    }
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (!event) {
+      return res.status(404).send('Event not found');
+    }
+
+    const { generateTicketPdfBuffer } = await import('../services/pdf.ts');
+    const pdfBuffer = await generateTicketPdfBuffer(booking, event);
+
+    const ticketId = booking.ticket_id || booking.id.substring(0, 8).toUpperCase();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Zyron_Ticket_${ticketId}.pdf"`);
+    return res.send(pdfBuffer);
+  } catch (err: any) {
+    console.error('Failed to generate ticket PDF:', err);
+    return res.status(500).send('Error generating PDF ticket');
+  }
+});
+
 export default router;

@@ -6,9 +6,11 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Calendar, MapPin, Ticket, ShieldCheck, AlertCircle, Users, ArrowLeft } from 'lucide-react';
-import { Event, TicketTier, User } from '../types';
+import { Event, TicketTier, User, Booking } from '../types';
 import { apiFetch } from '../lib/api';
 import LoadingOverlay from '../components/LoadingOverlay';
+import UPIPaymentModal from '../components/UPIPaymentModal';
+import SocialShare from '../components/SocialShare';
 
 interface EventDetailProps {
   slug: string;
@@ -51,6 +53,7 @@ export default function EventDetail({
   const [guestInstagram, setGuestInstagram] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [hasPrefilled, setHasPrefilled] = useState(false);
+  const [upiModalBooking, setUpiModalBooking] = useState<Booking | null>(null);
 
   // Coupon application state
   const [couponInput, setCouponInput] = useState('');
@@ -293,74 +296,12 @@ export default function EventDetail({
       // Refetch events so tickets_sold goes up
       refetchEvents();
       
-      if (!cashfreeConfig.configured) {
-        // Dev bypass for testing when Cashfree is not configured
-        const bypassRes = await apiFetch(`/api/bookings/${booking.id}/dev-bypass`, { method: 'POST' });
-        if (bypassRes.ok) {
-           setCurrentRoute(`/booking-success?bookingId=${booking.id}`);
-        } else {
-           setErrorMsg('Payment gateway is not configured and dev bypass failed.');
-           setSubmitting(false);
-        }
-        return;
-      }
-
-      const res = await loadCashfreeScript();
-      if (!res) {
-        setErrorMsg('Failed to load Cashfree SDK. Check your connection.');
-        setSubmitting(false);
-        return;
-      }
-
-      const orderData = await apiFetch(`/api/bookings/${booking.id}/cashfree-order`, { method: 'POST' }).then(r => r.json());
-      if (orderData.error) {
-        setErrorMsg(orderData.error);
-        setSubmitting(false);
-        return;
-      }
-
-      const cashfree = (window as any).Cashfree({
-        mode: cashfreeConfig.environment === 'PRODUCTION' ? 'production' : 'sandbox'
+      // Open UPI QR & Payment Proof Modal (MVP Architecture Flow)
+      setUpiModalBooking({
+        ...booking,
+        event_title: event.title
       });
-
-      const checkoutOptions = {
-        paymentSessionId: orderData.payment_session_id,
-        redirectTarget: "_modal",
-      };
-
-      cashfree.checkout(checkoutOptions).then(async (result: any) => {
-        if (result.error) {
-          console.error("Cashfree checkout error:", result.error);
-          setErrorMsg(result.error.message || 'Payment cancelled or failed.');
-          setSubmitting(false);
-        } else if (result.paymentDetails) {
-          try {
-            const verifyRes = await apiFetch(`/api/bookings/${booking.id}/verify-cashfree`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                order_id: orderData.cf_order_id
-              })
-            });
-            const verifyData = await verifyRes.json();
-            if (verifyData.success) {
-              setCurrentRoute(`/booking-success?bookingId=${booking.id}`);
-            } else {
-              setErrorMsg(verifyData.error || 'Payment verification failed.');
-              setSubmitting(false);
-            }
-          } catch (e) {
-            setErrorMsg('Payment verification failed.');
-            setSubmitting(false);
-          }
-        } else if (result.redirect) {
-          console.log("Redirecting to Cashfree checkout...");
-        }
-      }).catch((err: any) => {
-        console.error("Cashfree checkout exception:", err);
-        setErrorMsg(err.message || 'Failed to initialize Cashfree checkout.');
-        setSubmitting(false);
-      });
+      setSubmitting(false);
     } catch (err: any) {
       setErrorMsg(err.message || 'Booking failed. Please try again.');
       setSubmitting(false);
@@ -434,6 +375,9 @@ export default function EventDetail({
               <p key={i}>{para}</p>
             ))}
           </div>
+
+          {/* Social Sharing & Viral Marketing Bar */}
+          <SocialShare eventTitle={event.title} teaser={event.teaser} eventSlug={event.slug} />
         </div>
 
         {/* Right Aspect - Hero Image Banner */}
@@ -741,6 +685,16 @@ export default function EventDetail({
       </div>
 
       <LoadingOverlay isVisible={submitting} />
+
+      {upiModalBooking && (
+        <UPIPaymentModal
+          booking={upiModalBooking}
+          onClose={() => setUpiModalBooking(null)}
+          onSuccess={() => {
+            refetchEvents();
+          }}
+        />
+      )}
     </div>
   );
 }

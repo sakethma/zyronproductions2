@@ -6,7 +6,7 @@
 export type AppRole = 'admin' | 'user';
 export type EventStatus = 'draft' | 'published' | 'archived';
 export type TicketTier = 'general' | 'vip' | 'group' | 'earlybird' | 'couple';
-export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded';
+export type PaymentStatus = 'pending' | 'pending_verification' | 'paid' | 'failed' | 'refunded';
 
 export interface Event {
   id: string;
@@ -42,6 +42,14 @@ export interface Booking {
   total_cents: number;
   payment_status: PaymentStatus;
   payment_provider_ref?: string;
+  ticket_id?: string;
+  utr?: string;
+  payment_proof_url?: string;
+  ocr_detected_utr?: string;
+  ocr_detected_amount?: number;
+  rejection_reason?: string;
+  whatsapp_status?: string;
+  is_duplicate_utr?: boolean;
   dietary?: string;
   role_preference?: string;
   accessibility?: string;

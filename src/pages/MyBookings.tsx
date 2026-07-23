@@ -9,6 +9,7 @@ import { Calendar, MapPin, Ticket, ShieldAlert, CheckCircle, Edit, Trash2, XCirc
 import { Booking, PaymentStatus } from '../types';
 import { apiFetch } from '../lib/api';
 import LoadingOverlay from '../components/LoadingOverlay';
+import UPIPaymentModal from '../components/UPIPaymentModal';
 
 interface MyBookingsProps {
   setCurrentRoute: (route: string) => void;
@@ -687,6 +688,16 @@ export default function MyBookings({
             </div>
           </div>
         </div>
+      )}
+
+      {payingBooking && (
+        <UPIPaymentModal
+          booking={payingBooking}
+          onClose={() => setPayingBooking(null)}
+          onSuccess={() => {
+            fetchBookings();
+          }}
+        />
       )}
 
       <LoadingOverlay isVisible={submittingPayment} />

@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
-import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail } from 'lucide-react';
+import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail, Bell } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import QRScanner from '../components/QRScanner';
 import { Event, Booking, GalleryItem, AdminAnalytics, User, TicketTier, EventStatus } from '../types';
@@ -17,7 +17,7 @@ interface AdminProps {
   setCurrentRoute: (route: string) => void;
 }
 
-type AdminTab = 'analytics' | 'events' | 'guests' | 'gallery' | 'coupons' | 'diagnostics';
+type AdminTab = 'analytics' | 'payments' | 'events' | 'guests' | 'gallery' | 'coupons' | 'diagnostics';
 
 export default function Admin({
   user,
@@ -82,6 +82,206 @@ export default function Admin({
       return () => clearInterval(interval);
     }
   }, [activeTab]);
+
+  // ----------------- TAB: PAYMENT VERIFICATION (MVP WORKFLOW) -----------------
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+  const [actioningPaymentId, setActioningPaymentId] = useState<string | null>(null);
+  const [rejectionReasons, setRejectionReasons] = useState<{ [bookingId: string]: string }>({});
+  const [autoApproveToggle, setAutoApproveToggle] = useState(false);
+  const [runningAutoApprove, setRunningAutoApprove] = useState(false);
+  const [scanningOcrId, setScanningOcrId] = useState<string | null>(null);
+
+  const [selectedBookingIds, setSelectedBookingIds] = useState<string[]>([]);
+  const [bulkApproving, setBulkApproving] = useState(false);
+  const [triggeringReminders, setTriggeringReminders] = useState(false);
+
+  const isAllSelected = pendingPayments.length > 0 && selectedBookingIds.length === pendingPayments.length;
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedBookingIds(pendingPayments.map((b) => b.id));
+    } else {
+      setSelectedBookingIds([]);
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedBookingIds((prev) => [...prev, id]);
+    } else {
+      setSelectedBookingIds((prev) => prev.filter((i) => i !== id));
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedBookingIds.length === 0) return;
+    if (!confirm(`Are you sure you want to approve ${selectedBookingIds.length} selected booking(s)? Digital passes & WhatsApp notifications will be issued.`)) return;
+
+    setBulkApproving(true);
+    try {
+      const res = await apiFetch('/api/admin/bookings/bulk-approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedBookingIds }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast(`Bulk-Approved ${data.approvedCount} booking(s)! Digital passes & WhatsApp notifications dispatched.`);
+        setSelectedBookingIds([]);
+        fetchPendingPayments();
+        refetchEvents();
+      } else {
+        triggerToast(data.error || 'Bulk approval failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Bulk approval error.');
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  const handleTriggerReminders = async () => {
+    setTriggeringReminders(true);
+    try {
+      const res = await apiFetch('/api/admin/trigger-reminders', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast(`WhatsApp Reminders Triggered! Sent ${data.sent} reminder(s) out of ${data.checked} upcoming paid booking(s).`);
+      } else {
+        triggerToast(data.error || 'Trigger reminders failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Trigger reminders error.');
+    } finally {
+      setTriggeringReminders(false);
+    }
+  };
+
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const handleDownloadAttendanceReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const res = await apiFetch('/api/admin/reports/attendance');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to generate report');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `attendance_report_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      triggerToast('Attendance Report exported successfully!');
+    } catch (err: any) {
+      triggerToast(err.message || 'Error downloading attendance report');
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
+
+  const fetchPendingPayments = () => {
+    setLoadingPayments(true);
+    apiFetch('/api/admin/pending-payments')
+      .then((res) => res.json())
+      .then((data) => {
+        setPendingPayments(Array.isArray(data) ? data : []);
+        setLoadingPayments(false);
+      })
+      .catch(() => setLoadingPayments(false));
+  };
+
+  const handleRunAutoApprove = async () => {
+    setRunningAutoApprove(true);
+    try {
+      const res = await apiFetch('/api/admin/auto-approve', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast(`Auto-Approved ${data.approvedCount} bookings! ${data.flaggedCount} require manual review.`);
+        fetchPendingPayments();
+        refetchEvents();
+      } else {
+        triggerToast(data.error || 'Auto-approve process failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Auto-approve error.');
+    } finally {
+      setRunningAutoApprove(false);
+    }
+  };
+
+  const handleScanOcr = async (bookingId: string) => {
+    setScanningOcrId(bookingId);
+    try {
+      const res = await apiFetch(`/api/admin/bookings/${bookingId}/scan-ocr`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast(`OCR Complete: Detected UTR ${data.ocrResult.detectedUtr || 'None'}`);
+        fetchPendingPayments();
+      } else {
+        triggerToast(data.error || 'OCR scan failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'OCR scanning error.');
+    } finally {
+      setScanningOcrId(null);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'payments') {
+      fetchPendingPayments();
+    }
+  }, [activeTab]);
+
+  const handleApprovePayment = async (bookingId: string) => {
+    setActioningPaymentId(bookingId);
+    try {
+      const res = await apiFetch(`/api/admin/bookings/${bookingId}/approve`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast('Booking approved! Ticket & QR code generated and sent.');
+        fetchPendingPayments();
+        refetchEvents();
+      } else {
+        triggerToast(data.error || 'Approval failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Error executing approval.');
+    } finally {
+      setActioningPaymentId(null);
+    }
+  };
+
+  const handleRejectPayment = async (bookingId: string) => {
+    const reason = rejectionReasons[bookingId] || 'Invalid payment proof or UTR mismatch';
+    setActioningPaymentId(bookingId);
+    try {
+      const res = await apiFetch(`/api/admin/bookings/${bookingId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        triggerToast('Booking rejected.');
+        fetchPendingPayments();
+      } else {
+        triggerToast(data.error || 'Rejection failed.');
+      }
+    } catch (err: any) {
+      triggerToast(err.message || 'Error executing rejection.');
+    } finally {
+      setActioningPaymentId(null);
+    }
+  };
 
   // ----------------- TAB: COUPONS WORKSPACE -----------------
   const [couponsList, setCouponsList] = useState<any[]>([]);
@@ -687,11 +887,22 @@ export default function Admin({
       )}
 
       {/* Admin Title bar */}
-      <div className="border-b border-neutral-200 dark:border-neutral-800 pb-8 mb-10 flex flex-col md:flex-row items-baseline justify-between gap-4">
+      <div className="border-b border-neutral-200 dark:border-neutral-800 pb-8 mb-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div className="space-y-2">
-          <h1 className="font-serif text-3xl md:text-5xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
-            Control Portal
-          </h1>
+          <div className="flex flex-wrap items-center gap-4">
+            <h1 className="font-serif text-3xl md:text-5xl font-bold tracking-tight text-neutral-900 dark:text-white flex items-center gap-2">
+              Control Portal
+            </h1>
+            <button
+              onClick={handleDownloadAttendanceReport}
+              disabled={downloadingReport}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 border border-emerald-500/30 shadow-sm"
+              title="Export CSV of all confirmed bookings & entry timestamps"
+            >
+              <Download className={`h-4 w-4 ${downloadingReport ? 'animate-bounce' : ''}`} />
+              <span>{downloadingReport ? 'Exporting Report...' : 'Download Attendance Report'}</span>
+            </button>
+          </div>
           <p className="text-xs font-mono text-neutral-400 uppercase tracking-widest">
             <span className="text-violet-600 dark:text-violet-500 font-bold">Zyron</span> Productions Admin Workspace • Authenticated as: {user.email}
           </p>
@@ -701,6 +912,7 @@ export default function Admin({
         <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide border border-neutral-200 dark:border-neutral-800 p-1 bg-neutral-50 dark:bg-neutral-900 max-w-full">
           {[
             { id: 'analytics', label: 'Metrics', icon: BarChart3 },
+            { id: 'payments', label: 'Pending Approvals', icon: CheckCircle2 },
             { id: 'events', label: 'Events', icon: CalendarDays },
             { id: 'guests', label: 'Guests', icon: Users2 },
             { id: 'gallery', label: 'Gallery', icon: ImageIcon },
@@ -894,7 +1106,306 @@ export default function Admin({
         </div>
       )}
 
-      {/* -------------------- TAB 2: EVENTS WORKSPACE -------------------- */}
+      {/* -------------------- TAB 2: PENDING APPROVALS & PAYMENT PROOF -------------------- */}
+      {activeTab === 'payments' && (
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white dark:bg-neutral-950 p-6 border border-neutral-200 dark:border-neutral-800">
+            <div>
+              <h3 className="font-serif text-xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <span>Pending Payment Verification Queue</span>
+                <span className="text-xs font-mono bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20 px-2 py-0.5 uppercase">
+                  {pendingPayments.length} Pending
+                </span>
+              </h3>
+              <p className="text-xs font-mono text-neutral-500 dark:text-neutral-400 mt-1">
+                Review submitted UPI transfer proofs, verify UTR transaction codes, check OCR validation, and approve or reject pass issuances.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Verify & Auto-Approve Toggle */}
+              <div className="flex items-center space-x-2 bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-3 py-2">
+                <input
+                  type="checkbox"
+                  id="verify-auto-approve-toggle"
+                  checked={autoApproveToggle}
+                  onChange={(e) => setAutoApproveToggle(e.target.checked)}
+                  className="accent-violet-600 h-4 w-4 cursor-pointer"
+                />
+                <label htmlFor="verify-auto-approve-toggle" className="text-xs font-mono font-semibold text-neutral-900 dark:text-white cursor-pointer select-none">
+                  Verify & Auto-Approve
+                </label>
+              </div>
+
+              {autoApproveToggle && (
+                <button
+                  onClick={handleRunAutoApprove}
+                  disabled={runningAutoApprove || pendingPayments.length === 0}
+                  className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-mono tracking-widest uppercase transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <Scan className={`h-3.5 w-3.5 ${runningAutoApprove ? 'animate-spin' : ''}`} />
+                  <span>{runningAutoApprove ? 'Processing...' : 'Run Auto-Approve Batch'}</span>
+                </button>
+              )}
+
+              <button
+                onClick={fetchPendingPayments}
+                className="flex items-center space-x-2 border border-neutral-900 dark:border-white px-4 py-2 text-xs font-mono tracking-widest uppercase hover:bg-neutral-950 hover:text-white dark:hover:bg-white dark:hover:text-neutral-950 transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingPayments ? 'animate-spin' : ''}`} />
+                <span>Refresh Queue</span>
+              </button>
+            </div>
+          </div>
+
+          {loadingPayments ? (
+            <div className="p-12 text-center text-xs font-mono text-neutral-400 animate-pulse border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950">
+              Fetching pending payment submissions...
+            </div>
+          ) : pendingPayments.length === 0 ? (
+            <div className="p-12 text-center border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 space-y-3">
+              <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+              <p className="text-sm font-semibold text-neutral-900 dark:text-white">Queue Empty</p>
+              <p className="text-xs text-neutral-500 font-mono">No pending payments requiring manual review at this moment.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Bulk Actions Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 bg-neutral-100 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 px-6 py-3 font-mono text-xs">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    id="select-all-payments"
+                    checked={isAllSelected}
+                    onChange={(e) => handleSelectAll(e.target.checked)}
+                    className="accent-violet-600 h-4 w-4 cursor-pointer"
+                  />
+                  <label htmlFor="select-all-payments" className="font-semibold text-neutral-900 dark:text-white cursor-pointer select-none">
+                    Select All ({pendingPayments.length})
+                  </label>
+                  {selectedBookingIds.length > 0 && (
+                    <span className="text-violet-600 dark:text-violet-400 font-bold">
+                      • {selectedBookingIds.length} Selected
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-3">
+                  {selectedBookingIds.length > 0 && (
+                    <button
+                      onClick={handleBulkApprove}
+                      disabled={bulkApproving}
+                      className="flex items-center space-x-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCircle2 className={`h-3.5 w-3.5 ${bulkApproving ? 'animate-spin' : ''}`} />
+                      <span>{bulkApproving ? 'Approving...' : `Bulk Approve Selected (${selectedBookingIds.length})`}</span>
+                    </button>
+                  )}
+
+                  <button
+                    onClick={handleTriggerReminders}
+                    disabled={triggeringReminders}
+                    className="flex items-center space-x-1.5 border border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 px-3 py-2 uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50"
+                    title="Run background WhatsApp 24h event reminder check"
+                  >
+                    <Bell className={`h-3.5 w-3.5 ${triggeringReminders ? 'animate-spin' : ''}`} />
+                    <span>{triggeringReminders ? 'Checking...' : 'Trigger 24h WhatsApp Reminders'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-6">
+                {pendingPayments.map((bk) => (
+                  <div
+                    key={bk.id}
+                    className={`border p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start ${
+                      bk.is_duplicate_utr || bk.has_amount_mismatch
+                        ? 'border-amber-500/50 bg-amber-500/5 dark:bg-amber-950/10'
+                        : 'border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950'
+                    }`}
+                  >
+                    {/* Left: Booking & Guest details */}
+                    <div className="lg:col-span-5 space-y-4">
+                      <div className="flex justify-between items-start border-b border-neutral-100 dark:border-neutral-900 pb-3">
+                        <div className="flex items-center space-x-3">
+                          <input
+                            type="checkbox"
+                            id={`select-booking-${bk.id}`}
+                            checked={selectedBookingIds.includes(bk.id)}
+                            onChange={(e) => handleSelectOne(bk.id, e.target.checked)}
+                            className="accent-violet-600 h-4 w-4 cursor-pointer"
+                          />
+                          <div>
+                            <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400">BOOKING REF</span>
+                            <h4 className="font-mono text-base font-bold text-neutral-900 dark:text-white">{bk.id}</h4>
+                          </div>
+                        </div>
+                      <span className="text-[10px] font-mono uppercase px-2 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        {bk.payment_status}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 text-xs font-mono text-neutral-600 dark:text-neutral-300">
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase">EVENT</span>
+                        <span className="font-sans font-semibold text-neutral-900 dark:text-white">{bk.event_title || bk.event_id}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-neutral-400 block text-[10px] uppercase">GUEST NAME</span>
+                          <span className="font-semibold text-neutral-900 dark:text-white">{bk.guest_name}</span>
+                        </div>
+                        <div>
+                          <span className="text-neutral-400 block text-[10px] uppercase">PHONE</span>
+                          <span>{bk.guest_phone || 'N/A'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400 block text-[10px] uppercase">EMAIL</span>
+                        <span>{bk.guest_email}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-900">
+                        <div>
+                          <span className="text-neutral-400 block text-[10px] uppercase">PASS TIER</span>
+                          <span className="uppercase font-bold">{bk.tier} ({bk.quantity}x)</span>
+                        </div>
+                        <div>
+                          <span className="text-neutral-400 block text-[10px] uppercase">AMOUNT DUE</span>
+                          <span className="font-bold text-neutral-900 dark:text-white">{formatPrice(bk.total_cents || bk.total_price_cents)}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Middle: Proof screenshot & UTR Verification */}
+                  <div className="lg:col-span-4 space-y-4 border-t lg:border-t-0 lg:border-l border-neutral-100 dark:border-neutral-900 pt-4 lg:pt-0 lg:pl-6">
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400 block">
+                          SUBMITTED UTR / TRANSACTION ID
+                        </span>
+                        <button
+                          onClick={() => handleScanOcr(bk.id)}
+                          disabled={scanningOcrId === bk.id || !bk.payment_proof_url}
+                          className="text-[10px] font-mono text-violet-600 dark:text-violet-400 hover:underline flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                        >
+                          <Scan className={`h-3 w-3 ${scanningOcrId === bk.id ? 'animate-spin' : ''}`} />
+                          <span>{scanningOcrId === bk.id ? 'Scanning...' : 'Scan OCR'}</span>
+                        </button>
+                      </div>
+
+                      <div className="bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-3 font-mono text-sm font-bold tracking-wider text-neutral-900 dark:text-white select-all">
+                        {bk.utr || 'No UTR provided'}
+                      </div>
+
+                      {/* OCR Results Badge */}
+                      {(bk.ocr_detected_utr || bk.ocr_detected_amount) && (
+                        <div className="bg-violet-500/10 border border-violet-500/20 p-2.5 font-mono text-[11px] text-violet-700 dark:text-violet-300 space-y-1">
+                          <div className="font-bold flex items-center space-x-1">
+                            <Scan className="h-3.5 w-3.5" />
+                            <span>OCR Scanner Detection:</span>
+                          </div>
+                          <div>Detected UTR: <strong>{bk.ocr_detected_utr || 'Not found'}</strong></div>
+                          <div>Detected Amount: <strong>₹{bk.ocr_detected_amount || 0}</strong></div>
+                        </div>
+                      )}
+
+                      {/* Warnings & Discrepancies */}
+                      {bk.is_duplicate_utr && (
+                        <div className="flex items-center space-x-1.5 text-xs text-red-600 dark:text-red-400 font-mono font-semibold bg-red-500/10 p-2 border border-red-500/20">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>DISCREPANCY: Duplicate UTR detected across multiple bookings!</span>
+                        </div>
+                      )}
+
+                      {bk.has_amount_mismatch && (
+                        <div className="flex items-center space-x-1.5 text-xs text-amber-600 dark:text-amber-400 font-mono font-semibold bg-amber-500/10 p-2 border border-amber-500/20">
+                          <AlertCircle className="h-4 w-4 shrink-0" />
+                          <span>DISCREPANCY: Amount mismatch (Expected ₹{Math.round((bk.expected_total_cents || 0) / 100)})</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Proof Screenshot */}
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400 block">
+                        PAYMENT SCREENSHOT PROOF
+                      </span>
+                      {bk.payment_proof_url ? (
+                        <div className="relative group border border-neutral-200 dark:border-neutral-800 overflow-hidden max-h-48 bg-neutral-900 flex items-center justify-center">
+                          <img
+                            src={bk.payment_proof_url}
+                            alt="Payment Proof"
+                            className="object-contain max-h-48 w-full cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(bk.payment_proof_url, '_blank')}
+                          />
+                          <a
+                            href={bk.payment_proof_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="absolute bottom-2 right-2 bg-neutral-950/80 text-white text-[10px] font-mono px-2 py-1 uppercase tracking-wider backdrop-blur-xs"
+                          >
+                            Open Full View ↗
+                          </a>
+                        </div>
+                      ) : (
+                        <div className="p-4 text-center font-mono text-xs text-neutral-400 border border-dashed border-neutral-300 dark:border-neutral-800">
+                          No screenshot uploaded
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right: Actions */}
+                  <div className="lg:col-span-3 space-y-4 border-t lg:border-t-0 lg:border-l border-neutral-100 dark:border-neutral-900 pt-4 lg:pt-0 lg:pl-6 flex flex-col justify-between h-full">
+                    <div className="space-y-3">
+                      <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-400 block">
+                        ADMIN DECISION
+                      </span>
+
+                      <div>
+                        <label className="text-[10px] font-mono uppercase text-neutral-400 block mb-1">
+                          Rejection Reason (If rejecting)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. UTR mismatch / Invalid screenshot"
+                          value={rejectionReasons[bk.id] || ''}
+                          onChange={(e) =>
+                            setRejectionReasons((prev) => ({ ...prev, [bk.id]: e.target.value }))
+                          }
+                          className="w-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 p-2 text-xs font-mono text-neutral-900 dark:text-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-4">
+                      <button
+                        onClick={() => handleApprovePayment(bk.id)}
+                        disabled={actioningPaymentId === bk.id}
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-3 text-xs font-mono tracking-widest uppercase transition-colors flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        <span>{actioningPaymentId === bk.id ? 'Approving...' : 'Approve & Issue Pass'}</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleRejectPayment(bk.id)}
+                        disabled={actioningPaymentId === bk.id}
+                        className="w-full bg-red-600/10 hover:bg-red-600 text-red-600 hover:text-white border border-red-600/30 py-2.5 text-xs font-mono tracking-widest uppercase transition-colors flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        <span>Reject Booking</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    )}
       {activeTab === 'events' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
@@ -1206,24 +1717,36 @@ export default function Admin({
               </div>
 
               {/* Action Buttons */}
-              {selectedEventId && guests.length > 0 && (
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => setShowScanner(!showScanner)}
-                    className="flex items-center space-x-1.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-950 px-3 py-2 text-white hover:bg-neutral-800 transition-colors dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
-                  >
-                    <Scan className="h-4 w-4" />
-                    <span>Scan Ticket</span>
-                  </button>
-                  <button
-                    onClick={handleExportCSV}
-                    className="flex items-center space-x-1.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 text-neutral-900 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
-                  >
-                    <Download className="h-4 w-4" />
-                    <span>Export CSV</span>
-                  </button>
-                </div>
-              )}
+              <div className="flex items-center space-x-2">
+                {selectedEventId && guests.length > 0 && (
+                  <>
+                    <button
+                      onClick={() => setShowScanner(!showScanner)}
+                      className="flex items-center space-x-1.5 border border-neutral-200 dark:border-neutral-800 bg-neutral-950 px-3 py-2 text-white hover:bg-neutral-800 transition-colors dark:bg-white dark:text-neutral-950 dark:hover:bg-neutral-200"
+                    >
+                      <Scan className="h-4 w-4" />
+                      <span>Scan Ticket</span>
+                    </button>
+                    <button
+                      onClick={handleExportCSV}
+                      className="flex items-center space-x-1.5 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 text-neutral-900 dark:text-white hover:bg-neutral-50 dark:hover:bg-neutral-900 transition-colors"
+                      title="Export CSV for selected event"
+                    >
+                      <Download className="h-4 w-4" />
+                      <span>Filtered CSV</span>
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={handleDownloadAttendanceReport}
+                  disabled={downloadingReport}
+                  className="flex items-center space-x-1.5 border border-emerald-500/40 bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 transition-colors disabled:opacity-50 font-bold uppercase tracking-wider"
+                  title="Download CSV report containing all confirmed bookings & entry timestamps"
+                >
+                  <Download className={`h-4 w-4 ${downloadingReport ? 'animate-bounce' : ''}`} />
+                  <span>{downloadingReport ? 'Exporting...' : 'Attendance Report (All)'}</span>
+                </button>
+              </div>
             </div>
           </div>
 

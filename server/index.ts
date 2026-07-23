@@ -76,6 +76,33 @@ app.use('/api/events', eventsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/admin', adminRouter);
 
+// Ticket PDF download endpoint (/api/tickets/:id/download or /api/tickets/:id/pdf)
+app.get(['/api/tickets/:id/download', '/api/tickets/:id/pdf'], async (req, res: any) => {
+  try {
+    const db = await readDb();
+    const booking = db.bookings.find((b: any) => b.id === req.params.id || b.ticket_id === req.params.id);
+    if (!booking) {
+      return res.status(404).send('Ticket pass not found');
+    }
+
+    const event = db.events.find((e: any) => e.id === booking.event_id);
+    if (!event) {
+      return res.status(404).send('Event not found');
+    }
+
+    const { generateTicketPdfBuffer } = await import('./services/pdf.ts');
+    const pdfBuffer = await generateTicketPdfBuffer(booking, event);
+
+    const ticketId = booking.ticket_id || booking.id.substring(0, 8).toUpperCase();
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="Zyron_Ticket_${ticketId}.pdf"`);
+    return res.send(pdfBuffer);
+  } catch (err: any) {
+    console.error('Failed to generate ticket PDF:', err);
+    return res.status(500).send('Error generating PDF ticket');
+  }
+});
+
 // Cashfree configuration info for the frontend
 app.get('/api/config/cashfree', (req, res) => {
   return res.json({
@@ -418,9 +445,12 @@ app.post('/api/test/e2e-email-flow', async (req, res) => {
   }
 });
 
+import { startReminderScheduler } from './services/reminder.ts';
+
 // ------------------- VITE & STATIC SERVING -------------------
 async function startServer() {
   await initDb();
+  startReminderScheduler();
 
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
