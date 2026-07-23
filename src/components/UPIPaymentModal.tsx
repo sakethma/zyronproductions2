@@ -21,8 +21,8 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const upiId = 'ullengalasakethma@ybl';
-  const payeeName = 'ULLENGALA SAKETHMA';
+  const upiId = 'zyronproductions@ybl';
+  const payeeName = 'ZYRON PRODUCTIONS';
   const amountRs = Math.round(booking.total_cents / 100);
   const bookingDisplayId = booking.id.length > 10 ? `EVT${booking.id.substring(0, 6).toUpperCase()}` : booking.id.toUpperCase();
 
@@ -159,7 +159,7 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
               {/* Account Holder Name */}
               <div className="text-center pt-1">
                 <h4 className="font-mono text-sm font-extrabold uppercase tracking-widest text-neutral-100">
-                  ULLENGALA SAKETHMA
+                  {payeeName}
                 </h4>
                 <p className="text-[10px] text-neutral-500 font-mono mt-1">
                   Verified Official Merchant UPI • {upiId}
