@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../lib/api';
-import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail, Bell } from 'lucide-react';
+import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail, Bell, Sparkles, Search, Filter, Copy, UserCheck, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import QRScanner from '../components/QRScanner';
 import { Event, Booking, GalleryItem, AdminAnalytics, User, TicketTier, EventStatus } from '../types';
@@ -17,7 +17,7 @@ interface AdminProps {
   setCurrentRoute: (route: string) => void;
 }
 
-type AdminTab = 'analytics' | 'payments' | 'events' | 'guests' | 'gallery' | 'coupons' | 'diagnostics';
+type AdminTab = 'analytics' | 'payments' | 'events' | 'guests' | 'reservations' | 'gallery' | 'coupons' | 'diagnostics';
 
 export default function Admin({
   user,
@@ -410,7 +410,15 @@ export default function Admin({
   const [groupPrice, setGroupPrice] = useState<string>('0');
   const [earlybirdPrice, setEarlybirdPrice] = useState<string>('0');
   const [couplePrice, setCouplePrice] = useState<string>('0');
+  const [eventDoorsOpen, setEventDoorsOpen] = useState<string>('20:00 IST');
   const [eventStatus, setEventStatus] = useState<EventStatus>('draft');
+  const [eventReservationMode, setEventReservationMode] = useState<boolean>(true);
+  const [eventTicketSalesMode, setEventTicketSalesMode] = useState<boolean>(false);
+  const [eventReservationLimit, setEventReservationLimit] = useState<number>(1000);
+  const [eventReservationDeadline, setEventReservationDeadline] = useState<string>('');
+  const [eventEarlyAccessDurationHours, setEventEarlyAccessDurationHours] = useState<number>(24);
+  const [eventAutoSwitch, setEventAutoSwitch] = useState<boolean>(true);
+
   const [savingEvent, setSavingEvent] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -457,7 +465,24 @@ export default function Admin({
     setGroupPrice((ev.group_price_cents / 100).toString());
     setEarlybirdPrice((ev.earlybird_price_cents / 100 || 0).toString());
     setCouplePrice((ev.couple_price_cents / 100 || 0).toString());
+    setEventDoorsOpen(ev.doors_open || '20:00 IST');
     setEventStatus(ev.status);
+
+    setEventReservationMode(ev.reservation_mode ?? true);
+    setEventTicketSalesMode(ev.ticket_sales_mode ?? false);
+    setEventReservationLimit(ev.reservation_limit ?? 1000);
+    
+    if (ev.reservation_deadline) {
+      const d = new Date(ev.reservation_deadline);
+      const off = d.getTimezoneOffset() * 60000;
+      setEventReservationDeadline(new Date(d.getTime() - off).toISOString().slice(0, 16));
+    } else {
+      const defaultDeadline = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+      const off = defaultDeadline.getTimezoneOffset() * 60000;
+      setEventReservationDeadline(new Date(defaultDeadline.getTime() - off).toISOString().slice(0, 16));
+    }
+    setEventEarlyAccessDurationHours(ev.early_access_duration_hours ?? 24);
+    setEventAutoSwitch(ev.auto_switch ?? true);
   };
 
   const handleResetEventForm = () => {
@@ -475,7 +500,17 @@ export default function Admin({
     setGroupPrice('0');
     setEarlybirdPrice('0');
     setCouplePrice('0');
+    setEventDoorsOpen('20:00 IST');
     setEventStatus('draft');
+
+    setEventReservationMode(true);
+    setEventTicketSalesMode(false);
+    setEventReservationLimit(1000);
+    const defaultDeadline = new Date(Date.now() + 7 * 24 * 3600 * 1000);
+    const off = defaultDeadline.getTimezoneOffset() * 60000;
+    setEventReservationDeadline(new Date(defaultDeadline.getTime() - off).toISOString().slice(0, 16));
+    setEventEarlyAccessDurationHours(24);
+    setEventAutoSwitch(true);
   };
 
   const handleSaveEvent = async (e: React.FormEvent) => {
@@ -505,7 +540,14 @@ export default function Admin({
           group_price: parseFloat(groupPrice) || 0,
           earlybird_price: parseFloat(earlybirdPrice) || 0,
           couple_price: parseFloat(couplePrice) || 0,
+          doors_open: eventDoorsOpen,
           status: eventStatus,
+          reservation_mode: eventReservationMode,
+          ticket_sales_mode: eventTicketSalesMode,
+          reservation_limit: eventReservationLimit,
+          reservation_deadline: eventReservationDeadline ? new Date(eventReservationDeadline).toISOString() : new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+          early_access_duration_hours: eventEarlyAccessDurationHours,
+          auto_switch: eventAutoSwitch,
         }),
       });
 
@@ -793,6 +835,78 @@ export default function Admin({
     }
   };
 
+  // ----------------- RESERVATIONS TAB STATE -----------------
+  const [reservationsList, setReservationsList] = useState<any[]>([]);
+  const [loadingReservations, setLoadingReservations] = useState(false);
+  const [reservationSearch, setReservationSearch] = useState('');
+  const [reservationEventFilter, setReservationEventFilter] = useState('all');
+  const [downloadingReservationsCsv, setDownloadingReservationsCsv] = useState(false);
+  const [triggeringPhaseSwitchId, setTriggeringPhaseSwitchId] = useState<string | null>(null);
+
+  const fetchReservations = () => {
+    setLoadingReservations(true);
+    apiFetch('/api/reservations/admin/all')
+      .then((res) => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then((data) => {
+        setReservationsList(data || []);
+        setLoadingReservations(false);
+      })
+      .catch(() => {
+        setLoadingReservations(false);
+        triggerToast('Could not load reservations.');
+      });
+  };
+
+  useEffect(() => {
+    if (activeTab === 'reservations') {
+      fetchReservations();
+    }
+  }, [activeTab]);
+
+  const handleExportReservationsCSV = async () => {
+    setDownloadingReservationsCsv(true);
+    try {
+      const res = await apiFetch('/api/admin/reports/reservations');
+      if (!res.ok) throw new Error('Report generation failed');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `zyron_reservations_report_${Date.now()}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      triggerToast('Reservations CSV exported successfully.');
+    } catch (err: any) {
+      triggerToast(err.message || 'Error exporting reservations CSV.');
+    } finally {
+      setDownloadingReservationsCsv(false);
+    }
+  };
+
+  const handleTriggerPhaseSwitch = async (eventId: string) => {
+    if (!window.confirm("Trigger immediate Phase 2 (Ticket Sales) transition for this event? All active reservation holders will receive instant priority notifications.")) {
+      return;
+    }
+    setTriggeringPhaseSwitchId(eventId);
+    try {
+      const res = await apiFetch(`/api/reservations/admin/trigger-switch/${eventId}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to switch phase.');
+      triggerToast(data.message || 'Phase switch executed successfully.');
+      refetchEvents();
+      fetchReservations();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error triggering phase switch.');
+    } finally {
+      setTriggeringPhaseSwitchId(null);
+    }
+  };
+
   const fetchGallery = () => {
     setLoadingGallery(true);
     apiFetch('/api/gallery')
@@ -915,6 +1029,7 @@ export default function Admin({
             { id: 'payments', label: 'Pending Approvals', icon: CheckCircle2 },
             { id: 'events', label: 'Events', icon: CalendarDays },
             { id: 'guests', label: 'Guests', icon: Users2 },
+            { id: 'reservations', label: 'Reservations', icon: Sparkles },
             { id: 'gallery', label: 'Gallery', icon: ImageIcon },
             { id: 'coupons', label: 'Coupons', icon: Ticket },
             { id: 'diagnostics', label: 'SMTP & QR Test', icon: Mail },
@@ -1482,7 +1597,8 @@ export default function Admin({
               </div>
 
               {/* Date & Location */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Date, Doors Open & Location */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label id="form-date-lbl" className="text-[10px] font-mono text-neutral-400 uppercase">DATE &amp; TIME *</label>
                   <input
@@ -1491,6 +1607,17 @@ export default function Admin({
                     required
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
+                    className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label id="form-doors-lbl" className="text-[10px] font-mono text-neutral-400 uppercase">DOORS OPEN AT</label>
+                  <input
+                    id="form-doors-input"
+                    type="text"
+                    value={eventDoorsOpen}
+                    onChange={(e) => setEventDoorsOpen(e.target.value)}
+                    placeholder="20:00 IST"
                     className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-3 py-2 text-neutral-800 dark:text-white rounded-none outline-none focus:border-neutral-950 dark:focus:border-white"
                   />
                 </div>
@@ -1607,9 +1734,93 @@ export default function Admin({
                   className="w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2.5 text-neutral-800 dark:text-white rounded-none outline-none"
                 >
                   <option value="draft">Draft (Private / Invisible)</option>
-                  <option value="published">Published (Public / Active Booking)</option>
+                  <option value="published">Published (Public / Active Directory)</option>
                   <option value="archived">Archived (Ended / Lock History)</option>
                 </select>
+              </div>
+
+              {/* Event Settings (2-Phase Flow) */}
+              <div className="p-4 border border-violet-500/20 bg-violet-500/5 dark:bg-violet-950/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-mono text-xs font-bold uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    Event Settings (2-Phase Flow)
+                  </h4>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-300">
+                    {eventReservationMode ? 'Phase 1: Reservations Open' : 'Phase 2: Passes Live'}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono text-neutral-400 uppercase">Reservation Mode</label>
+                    <select
+                      value={eventReservationMode ? 'true' : 'false'}
+                      onChange={(e) => setEventReservationMode(e.target.value === 'true')}
+                      className="w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 py-1.5 text-xs text-neutral-800 dark:text-white"
+                    >
+                      <option value="true">Active (Reserve Spot)</option>
+                      <option value="false">Closed (Passes Live)</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono text-neutral-400 uppercase">Ticket Sales Mode</label>
+                    <select
+                      value={eventTicketSalesMode ? 'true' : 'false'}
+                      onChange={(e) => setEventTicketSalesMode(e.target.value === 'true')}
+                      className="w-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-2 py-1.5 text-xs text-neutral-800 dark:text-white"
+                    >
+                      <option value="false">Locked (Reservations Only)</option>
+                      <option value="true">Live (Buy Pass Active)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono text-neutral-400 uppercase">Reservation Limit</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50000}
+                      value={eventReservationLimit}
+                      onChange={(e) => setEventReservationLimit(parseInt(e.target.value) || 1000)}
+                      className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs text-neutral-800 dark:text-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-mono text-neutral-400 uppercase">Early Access (Hours)</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={168}
+                      value={eventEarlyAccessDurationHours}
+                      onChange={(e) => setEventEarlyAccessDurationHours(parseInt(e.target.value) || 24)}
+                      className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs text-neutral-800 dark:text-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-mono text-neutral-400 uppercase">Reservation Deadline (Countdown)</label>
+                  <input
+                    type="datetime-local"
+                    value={eventReservationDeadline}
+                    onChange={(e) => setEventReservationDeadline(e.target.value)}
+                    className="w-full border border-neutral-200 dark:border-neutral-800 bg-transparent px-2 py-1.5 text-xs text-neutral-800 dark:text-white"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[10px] font-mono text-neutral-400 uppercase">Auto Switch to Sales Mode</span>
+                  <input
+                    type="checkbox"
+                    checked={eventAutoSwitch}
+                    onChange={(e) => setEventAutoSwitch(e.target.checked)}
+                    className="h-4 w-4 accent-violet-600"
+                  />
+                </div>
               </div>
 
               {/* Submit / Reset Actions */}
@@ -2230,6 +2441,315 @@ export default function Admin({
                 </table>
               </div>
             )}
+          </div>
+
+        </div>
+      )}
+
+      {/* -------------------- TAB: RESERVATIONS LEDGER -------------------- */}
+      {activeTab === 'reservations' && (
+        <div className="space-y-8">
+          
+          {/* Header Controls */}
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-neutral-200 dark:border-neutral-800 pb-6">
+            <div>
+              <h2 className="font-serif text-2xl font-bold text-neutral-900 dark:text-white flex items-center gap-2">
+                <Sparkles className="h-6 w-6 text-violet-600 dark:text-violet-400" />
+                Spot Reservations &amp; Priority Ledger
+              </h2>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400 font-light mt-1">
+                Live monitoring of pre-sale spot reservations, priority access tokens, and Phase 2 transition controls.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-3 shrink-0">
+              <button
+                id="btn-refresh-reservations"
+                onClick={fetchReservations}
+                disabled={loadingReservations}
+                className="flex items-center space-x-2 border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3.5 py-2 text-xs font-mono uppercase tracking-wider text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white transition-colors cursor-pointer disabled:opacity-50"
+                title="Refresh live reservation data"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingReservations ? 'animate-spin' : ''}`} />
+                <span>Sync Live</span>
+              </button>
+
+              <button
+                id="btn-export-reservations-csv"
+                onClick={handleExportReservationsCSV}
+                disabled={downloadingReservationsCsv || reservationsList.length === 0}
+                className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 border border-emerald-500/30 shadow-xs"
+              >
+                <Download className={`h-4 w-4 ${downloadingReservationsCsv ? 'animate-bounce' : ''}`} />
+                <span>{downloadingReservationsCsv ? 'Exporting CSV...' : 'Export CSV Report'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Metric Overview Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6">
+              <div className="flex items-center justify-between text-neutral-400 font-mono text-[10px] tracking-wider uppercase mb-3">
+                <span>Total Spot Reservations</span>
+                <Sparkles className="h-4 w-4 text-violet-500" />
+              </div>
+              <h3 className="font-serif text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white">
+                {reservationsList.length}
+              </h3>
+              <p className="text-[10px] text-neutral-400 mt-2 font-mono">24-hour priority holds logged</p>
+            </div>
+
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6">
+              <div className="flex items-center justify-between text-neutral-400 font-mono text-[10px] tracking-wider uppercase mb-3">
+                <span>Total Reserved Passes</span>
+                <Ticket className="h-4 w-4 text-emerald-500" />
+              </div>
+              <h3 className="font-serif text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white">
+                {reservationsList.reduce((acc, r) => acc + (r.passes_count || 1), 0)}
+              </h3>
+              <p className="text-[10px] text-neutral-400 mt-2 font-mono">Requested passes across all spots</p>
+            </div>
+
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6">
+              <div className="flex items-center justify-between text-neutral-400 font-mono text-[10px] tracking-wider uppercase mb-3">
+                <span>Active Spot Phase Events</span>
+                <Clock className="h-4 w-4 text-amber-500" />
+              </div>
+              <h3 className="font-serif text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white">
+                {events.filter((e) => e.reservation_mode && !e.ticket_sales_mode).length}
+              </h3>
+              <p className="text-[10px] text-neutral-400 mt-2 font-mono">Experiences in Spot Reservation phase</p>
+            </div>
+
+            <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-6">
+              <div className="flex items-center justify-between text-neutral-400 font-mono text-[10px] tracking-wider uppercase mb-3">
+                <span>Converted / Notified</span>
+                <UserCheck className="h-4 w-4 text-blue-500" />
+              </div>
+              <h3 className="font-serif text-2xl md:text-3xl font-bold text-neutral-900 dark:text-white">
+                {reservationsList.filter((r) => r.notified_at || r.status === 'notified' || r.status === 'converted').length}
+              </h3>
+              <p className="text-[10px] text-neutral-400 mt-2 font-mono">Notified for Phase 2 ticket drop</p>
+            </div>
+          </div>
+
+          {/* Search and Filters Bar */}
+          <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="relative flex-1 w-full">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+              <input
+                id="search-reservations-input"
+                type="text"
+                value={reservationSearch}
+                onChange={(e) => setReservationSearch(e.target.value)}
+                placeholder="Search by name, email, phone, token, or experience..."
+                className="w-full pl-10 pr-4 py-2 border border-neutral-200 dark:border-neutral-800 bg-transparent text-xs font-mono text-neutral-900 dark:text-white outline-none focus:border-neutral-950 dark:focus:border-white transition-colors"
+              />
+            </div>
+
+            <div className="flex items-center space-x-3 w-full md:w-auto">
+              <div className="flex items-center space-x-2 shrink-0">
+                <Filter className="h-4 w-4 text-neutral-400" />
+                <span className="text-[10px] font-mono text-neutral-400 uppercase">Experience:</span>
+              </div>
+              <select
+                id="filter-reservations-event-select"
+                value={reservationEventFilter}
+                onChange={(e) => setReservationEventFilter(e.target.value)}
+                className="w-full md:w-auto border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 px-3 py-2 text-xs font-mono text-neutral-900 dark:text-white outline-none focus:border-neutral-950 dark:focus:border-white"
+              >
+                <option value="all">All Experiences</option>
+                {events.map((ev) => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} {ev.reservation_mode ? '(Spot Phase)' : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Live Reservations Table */}
+          <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 overflow-hidden">
+            {loadingReservations ? (
+              <div className="p-16 text-center font-mono text-xs text-neutral-400 space-y-3">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto text-violet-500" />
+                <p className="uppercase tracking-widest">Syncing Live Spot Reservations Ledger...</p>
+              </div>
+            ) : (() => {
+              const filtered = reservationsList.filter((r) => {
+                const matchEvent = reservationEventFilter === 'all' || r.event_id === reservationEventFilter;
+                const query = reservationSearch.toLowerCase().trim();
+                const ev = events.find((e) => e.id === r.event_id);
+                const eventTitle = (ev?.title || r.event_title || '').toLowerCase();
+                const name = (r.full_name || '').toLowerCase();
+                const email = (r.email || '').toLowerCase();
+                const phone = (r.phone_number || '').toLowerCase();
+                const token = (r.access_token || '').toLowerCase();
+                const insta = (r.instagram_username || '').toLowerCase();
+
+                const matchQuery = !query ||
+                  name.includes(query) ||
+                  email.includes(query) ||
+                  phone.includes(query) ||
+                  token.includes(query) ||
+                  insta.includes(query) ||
+                  eventTitle.includes(query);
+
+                return matchEvent && matchQuery;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="p-16 text-center space-y-3">
+                    <Sparkles className="h-8 w-8 text-neutral-300 dark:text-neutral-700 mx-auto" />
+                    <p className="text-sm font-serif font-bold text-neutral-700 dark:text-neutral-300">
+                      No Spot Reservations Found
+                    </p>
+                    <p className="text-xs text-neutral-400 font-light max-w-sm mx-auto">
+                      {reservationSearch || reservationEventFilter !== 'all'
+                        ? 'No reservations matched your search query or experience filter.'
+                        : 'No pre-sale spot reservations have been requested yet.'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs font-mono">
+                    <thead className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 text-neutral-400 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-3.5 px-4 font-semibold">GUEST &amp; CONTACT</th>
+                        <th className="py-3.5 px-4 font-semibold">EXPERIENCE</th>
+                        <th className="py-3.5 px-4 font-semibold text-center">PASSES / GROUP</th>
+                        <th className="py-3.5 px-4 font-semibold">PRIORITY ACCESS TOKEN</th>
+                        <th className="py-3.5 px-4 font-semibold text-center">STATUS</th>
+                        <th className="py-3.5 px-4 font-semibold">RESERVED DATE</th>
+                        <th className="py-3.5 px-4 font-semibold text-right">PHASE ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100 dark:divide-neutral-900 text-neutral-800 dark:text-neutral-200">
+                      {filtered.map((r) => {
+                        const boundEvent = events.find((e) => e.id === r.event_id);
+                        const isEventInSpotPhase = boundEvent?.reservation_mode && !boundEvent?.ticket_sales_mode;
+
+                        return (
+                          <tr key={r.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30 transition-colors">
+                            <td className="py-4 px-4">
+                              <div className="space-y-0.5">
+                                <p className="font-bold text-neutral-900 dark:text-white">{r.full_name}</p>
+                                <p className="text-[10px] text-neutral-400 select-all">{r.email}</p>
+                                <div className="flex items-center space-x-2 text-[10px] text-neutral-500 pt-0.5">
+                                  <span>📞 {r.phone_number}</span>
+                                  {r.instagram_username && (
+                                    <span className="text-violet-600 dark:text-violet-400 font-semibold">
+                                      @{r.instagram_username.replace(/^@/, '')}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 max-w-[180px]">
+                              <div className="space-y-0.5">
+                                <p className="font-semibold text-neutral-900 dark:text-white truncate" title={boundEvent?.title || r.event_title}>
+                                  {boundEvent?.title || r.event_title || 'Unknown Event'}
+                                </p>
+                                {boundEvent && (
+                                  <span className={`inline-block px-1.5 py-0.25 text-[9px] uppercase tracking-wider font-bold border ${
+                                    isEventInSpotPhase
+                                      ? 'border-amber-500/40 text-amber-600 bg-amber-500/10'
+                                      : 'border-emerald-500/40 text-emerald-600 bg-emerald-500/10'
+                                  }`}>
+                                    {isEventInSpotPhase ? 'Spot Phase Active' : 'Ticket Sales Live'}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 text-center">
+                              <div className="inline-flex flex-col items-center">
+                                <span className="font-bold text-sm text-neutral-900 dark:text-white">
+                                  {r.passes_count || 1}
+                                </span>
+                                <span className="text-[9px] text-neutral-400 uppercase">
+                                  Group: {r.group_size || 1}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4">
+                              <div className="flex items-center space-x-1.5">
+                                <code className="bg-neutral-100 dark:bg-neutral-900 px-2 py-1 text-[10px] font-mono text-neutral-800 dark:text-neutral-200 border border-neutral-200 dark:border-neutral-800 rounded-none select-all">
+                                  {r.access_token || 'N/A'}
+                                </code>
+                                {r.access_token && (
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(r.access_token);
+                                      triggerToast('Token copied to clipboard.');
+                                    }}
+                                    className="p-1 text-neutral-400 hover:text-neutral-900 dark:hover:text-white transition-colors cursor-pointer"
+                                    title="Copy Access Token"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 text-center">
+                              {r.notified_at || r.status === 'notified' ? (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider bg-blue-500/10 text-blue-600 border border-blue-500/30">
+                                  <span>Notified</span>
+                                </span>
+                              ) : r.status === 'converted' ? (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider bg-emerald-500/10 text-emerald-600 border border-emerald-500/30">
+                                  <span>Converted</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.5 text-[9px] uppercase font-bold tracking-wider bg-amber-500/10 text-amber-600 border border-amber-500/30">
+                                  <span>Reserved</span>
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-4 px-4 text-[11px] text-neutral-500 dark:text-neutral-400 whitespace-nowrap">
+                              {r.created_at ? new Date(r.created_at).toLocaleString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              }) : 'N/A'}
+                            </td>
+
+                            <td className="py-4 px-4 text-right">
+                              {boundEvent && isEventInSpotPhase ? (
+                                <button
+                                  onClick={() => handleTriggerPhaseSwitch(boundEvent.id)}
+                                  disabled={triggeringPhaseSwitchId === boundEvent.id}
+                                  className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1"
+                                  title="Trigger immediate transition to Phase 2 Ticket Sales"
+                                >
+                                  {triggeringPhaseSwitchId === boundEvent.id ? (
+                                    <span>Switching...</span>
+                                  ) : (
+                                    <span>Trigger Phase 2</span>
+                                  )}
+                                </button>
+                              ) : (
+                                <span className="text-[10px] text-neutral-400 italic">Sales Live</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
 
         </div>

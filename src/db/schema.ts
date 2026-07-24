@@ -27,8 +27,31 @@ export const events = pgTable('events', {
   earlybird_price_cents: integer('earlybird_price_cents').notNull(),
   couple_price_cents: integer('couple_price_cents').notNull(),
   status: text('status').notNull(),
+  doors_open: text('doors_open'),
+  reservation_mode: boolean('reservation_mode').notNull().default(true),
+  ticket_sales_mode: boolean('ticket_sales_mode').notNull().default(false),
+  reservation_limit: integer('reservation_limit').notNull().default(1000),
+  reservation_deadline: text('reservation_deadline'),
+  early_access_duration_hours: integer('early_access_duration_hours').notNull().default(24),
+  auto_switch: boolean('auto_switch').notNull().default(true),
   created_at: text('created_at').notNull(),
   updated_at: text('updated_at').notNull(),
+});
+
+export const reservations = pgTable('reservations', {
+  id: text('id').primaryKey(),
+  event_id: text('event_id').notNull().references(() => events.id),
+  full_name: text('full_name').notNull(),
+  phone_number: text('phone_number').notNull(),
+  email: text('email').notNull(),
+  instagram_username: text('instagram_username'),
+  passes_count: integer('passes_count').notNull().default(1),
+  group_size: integer('group_size').notNull().default(1),
+  coupon_code: text('coupon_code'),
+  access_token: text('access_token').notNull().unique(),
+  status: text('status').notNull().default('confirmed'),
+  notified_at: text('notified_at'),
+  created_at: text('created_at').notNull(),
 });
 
 export const bookings = pgTable('bookings', {
@@ -103,7 +126,15 @@ export const usersRelations = relations(users, ({ many }) => ({
 
 export const eventsRelations = relations(events, ({ many }) => ({
   bookings: many(bookings),
-  galleryItems: many(galleryItems)
+  galleryItems: many(galleryItems),
+  reservations: many(reservations)
+}));
+
+export const reservationsRelations = relations(reservations, ({ one }) => ({
+  event: one(events, {
+    fields: [reservations.event_id],
+    references: [events.id],
+  }),
 }));
 
 export const bookingsRelations = relations(bookings, ({ one }) => ({

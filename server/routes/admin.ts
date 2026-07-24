@@ -51,7 +51,8 @@ router.get('/events', requireAdmin, async (req: AuthRequest, res: any) => {
 router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
   const {
     id, title, teaser, description, event_date, location, image_url,
-    capacity, general_price, vip_price, group_price, earlybird_price, couple_price, status
+    capacity, general_price, vip_price, group_price, earlybird_price, couple_price, status, doors_open,
+    reservation_mode, ticket_sales_mode, reservation_limit, reservation_deadline, early_access_duration_hours, auto_switch
   } = req.body;
 
   if (!title || !location || !event_date || !capacity) {
@@ -103,6 +104,13 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
         earlybird_price_cents,
         couple_price_cents,
         status: status || 'draft',
+        doors_open: doors_open || '20:00 IST',
+        reservation_mode: reservation_mode !== undefined ? Boolean(reservation_mode) : (existing.reservation_mode ?? true),
+        ticket_sales_mode: ticket_sales_mode !== undefined ? Boolean(ticket_sales_mode) : (existing.ticket_sales_mode ?? false),
+        reservation_limit: reservation_limit !== undefined ? parseInt(reservation_limit) : (existing.reservation_limit ?? 1000),
+        reservation_deadline: reservation_deadline !== undefined ? reservation_deadline : (existing.reservation_deadline ?? null),
+        early_access_duration_hours: early_access_duration_hours !== undefined ? parseInt(early_access_duration_hours) : (existing.early_access_duration_hours ?? 24),
+        auto_switch: auto_switch !== undefined ? Boolean(auto_switch) : (existing.auto_switch ?? true),
         updated_at: new Date().toISOString()
       };
 
@@ -126,6 +134,13 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
         earlybird_price_cents,
         couple_price_cents,
         status: status || 'draft',
+        doors_open: doors_open || '20:00 IST',
+        reservation_mode: reservation_mode !== undefined ? Boolean(reservation_mode) : true,
+        ticket_sales_mode: ticket_sales_mode !== undefined ? Boolean(ticket_sales_mode) : false,
+        reservation_limit: reservation_limit !== undefined ? parseInt(reservation_limit) : 1000,
+        reservation_deadline: reservation_deadline || new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
+        early_access_duration_hours: early_access_duration_hours !== undefined ? parseInt(early_access_duration_hours) : 24,
+        auto_switch: auto_switch !== undefined ? Boolean(auto_switch) : true,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -918,6 +933,78 @@ router.get('/reports/attendance', requireAdmin, async (req: AuthRequest, res: an
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="zyron_attendance_report_${Date.now()}.csv"`);
+    return res.status(200).send(csvString);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Download Reservations CSV Report
+router.get('/reports/reservations', requireAdmin, async (req: AuthRequest, res: any) => {
+  try {
+    const db = await readDb();
+    const reservationsList = (db.reservations || []).map((r: any) => {
+      const ev = (db.events || []).find((e: any) => e.id === r.event_id);
+      return {
+        ...r,
+        event_title: ev?.title || 'Unknown Event'
+      };
+    });
+
+    reservationsList.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+    const rows = [
+      [
+        'Reservation ID',
+        'Event ID',
+        'Event Title',
+        'Full Name',
+        'Email',
+        'Phone Number',
+        'Instagram Handle',
+        'Passes Count',
+        'Group Size',
+        'Access Token',
+        'Status',
+        'Notified At',
+        'Reservation Date'
+      ]
+    ];
+
+    for (const r of reservationsList) {
+      const resDate = r.created_at ? new Date(r.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'N/A';
+      const notifiedDate = r.notified_at ? new Date(r.notified_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Not Yet';
+
+      rows.push([
+        r.id || 'N/A',
+        r.event_id || 'N/A',
+        r.event_title || 'Unknown Event',
+        r.full_name || 'N/A',
+        r.email || 'N/A',
+        r.phone_number || 'N/A',
+        r.instagram_username || 'N/A',
+        String(r.passes_count || 1),
+        String(r.group_size || 1),
+        r.access_token || 'N/A',
+        r.status || 'confirmed',
+        notifiedDate,
+        resDate
+      ]);
+    }
+
+    const csvString = rows
+      .map((row) =>
+        row
+          .map((field) => {
+            const escaped = String(field ?? '').replace(/"/g, '""');
+            return `"${escaped}"`;
+          })
+          .join(',')
+      )
+      .join('\n');
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="zyron_reservations_report_${Date.now()}.csv"`);
     return res.status(200).send(csvString);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });

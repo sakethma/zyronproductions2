@@ -25,8 +25,33 @@ export interface Event {
   earlybird_price_cents: number;
   couple_price_cents: number;
   status: EventStatus;
+  doors_open?: string;
+  reservation_mode?: boolean;
+  ticket_sales_mode?: boolean;
+  reservation_limit?: number;
+  reservation_deadline?: string;
+  early_access_duration_hours?: number;
+  auto_switch?: boolean;
+  reserved_count?: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface Reservation {
+  id: string;
+  event_id: string;
+  full_name: string;
+  phone_number: string;
+  email: string;
+  instagram_username?: string;
+  passes_count: number;
+  group_size: number;
+  coupon_code?: string;
+  access_token: string;
+  status: 'confirmed' | 'converted' | 'cancelled';
+  notified_at?: string;
+  created_at: string;
+  event_title?: string;
 }
 
 export interface Booking {

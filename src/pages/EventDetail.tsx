@@ -10,6 +10,7 @@ import { Event, TicketTier, User, Booking } from '../types';
 import { apiFetch } from '../lib/api';
 import LoadingOverlay from '../components/LoadingOverlay';
 import UPIPaymentModal from '../components/UPIPaymentModal';
+import ReservationSection from '../components/ReservationSection';
 
 interface EventDetailProps {
   slug: string;
@@ -55,6 +56,33 @@ export default function EventDetail({
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [hasPrefilled, setHasPrefilled] = useState(false);
   const [upiModalBooking, setUpiModalBooking] = useState<Booking | null>(null);
+  const [hasUnlockedPasses, setHasUnlockedPasses] = useState(false);
+
+  // Check URL parameters for priority access token
+  useEffect(() => {
+    if (!event) return;
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('access_token');
+    if (token) {
+      apiFetch(`/api/reservations/check-token?token=${encodeURIComponent(token)}&event_id=${event.id}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.valid && data.reservation) {
+            setHasUnlockedPasses(true);
+            const resItem = data.reservation;
+            setGuestName(resItem.full_name || '');
+            setGuestEmail(resItem.email || '');
+            setGuestPhone(resItem.phone_number || '');
+            setGuestInstagram(resItem.instagram_username || '');
+            setQuantity(resItem.passes_count || 1);
+            if (resItem.coupon_code) {
+              setCouponInput(resItem.coupon_code);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [event]);
 
   useEffect(() => {
     if (quantity > 1) {
@@ -348,6 +376,10 @@ export default function EventDetail({
     return `₹${Math.round(cents / 100).toLocaleString()}`;
   };
 
+  const isReservationMode = event ? (event.reservation_mode ?? true) : false;
+  const isTicketSalesMode = event ? (event.ticket_sales_mode ?? false) : false;
+  const showPassesBooking = !isReservationMode || isTicketSalesMode || hasUnlockedPasses;
+
   return (
     <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-12 md:py-20">
       
@@ -381,7 +413,7 @@ export default function EventDetail({
               <div>
                 <p className="text-xs font-mono text-neutral-400 uppercase">DATE &amp; TIME</p>
                 <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{formatDate(event.event_date)}</p>
-                <p className="text-xs text-neutral-400 mt-0.5">Doors open 20:00 IST</p>
+                <p className="text-xs text-neutral-400 mt-0.5">Doors open {event.doors_open || '20:00 IST'}</p>
               </div>
             </div>
             <div className="flex items-start space-x-3">
@@ -422,8 +454,38 @@ export default function EventDetail({
 
       </div>
 
+      {/* 2-Phase Reservation / Priority Access Section */}
+      <ReservationSection
+        event={event}
+        onPassesLiveClick={() => {
+          setHasUnlockedPasses(true);
+          setTimeout(() => {
+            const el = document.getElementById('booking-section');
+            if (el) el.scrollIntoView({ behavior: 'smooth' });
+          }, 100);
+        }}
+        onAccessTokenVerified={(resItem) => {
+          setHasUnlockedPasses(true);
+          if (resItem) {
+            setGuestName(resItem.full_name || '');
+            setGuestEmail(resItem.email || '');
+            setGuestPhone(resItem.phone_number || '');
+            setGuestInstagram(resItem.instagram_username || '');
+            setQuantity(resItem.passes_count || 1);
+            if (resItem.coupon_code) {
+              setCouponInput(resItem.coupon_code);
+            }
+            setTimeout(() => {
+              const el = document.getElementById('booking-section');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+          }
+        }}
+      />
+
       {/* Ticket Booking Panel */}
-      <div id="booking-section" className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+      {showPassesBooking && (
+        <div id="booking-section" className="grid grid-cols-1 lg:grid-cols-12 gap-12">
         
         {/* Left Side: Select Ticket Tier */}
         <div className="lg:col-span-7 space-y-6">
@@ -735,6 +797,7 @@ export default function EventDetail({
         </div>
 
       </div>
+      )}
 
       <LoadingOverlay isVisible={submitting} />
 

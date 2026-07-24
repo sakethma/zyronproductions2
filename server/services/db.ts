@@ -1,7 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { db as drizzleDb } from '../../src/db/index.ts';
-import { users, events, bookings, galleryItems, notifications, coupons } from '../../src/db/schema.ts';
+import { users, events, bookings, galleryItems, notifications, coupons, reservations } from '../../src/db/schema.ts';
 import { eq, desc, and, isNull, notInArray, sql } from 'drizzle-orm';
 
 export interface DbState {
@@ -11,6 +11,7 @@ export interface DbState {
   gallery_items: any[];
   notifications: any[];
   coupons: any[];
+  reservations: any[];
 }
 
 export async function readDb(): Promise<DbState> {
@@ -20,6 +21,7 @@ export async function readDb(): Promise<DbState> {
   const galleryList = await drizzleDb.select().from(galleryItems);
   const notificationsList = await drizzleDb.select().from(notifications);
   const couponsList = await drizzleDb.select().from(coupons);
+  const reservationsList = await drizzleDb.select().from(reservations).catch(() => []);
   
   return {
     users: usersList.map(u => ({ ...u, id: u.uid })),
@@ -27,7 +29,8 @@ export async function readDb(): Promise<DbState> {
     bookings: bookingsList,
     gallery_items: galleryList,
     notifications: notificationsList,
-    coupons: couponsList
+    coupons: couponsList,
+    reservations: reservationsList
   };
 }
 
@@ -57,7 +60,8 @@ export async function writeDb(data: DbState) {
       bookings: data.bookings,
       gallery_items: data.gallery_items,
       notifications: notificationsForJson,
-      coupons: data.coupons || []
+      coupons: data.coupons || [],
+      reservations: data.reservations || []
     };
     await fs.mkdir(DB_DIR, { recursive: true });
     await fs.writeFile(DB_PATH, JSON.stringify(jsonData, null, 2), 'utf-8');
@@ -72,6 +76,14 @@ export async function writeDb(data: DbState) {
       await tx.delete(coupons).where(notInArray(coupons.id, newCouponIds));
     } else {
       await tx.delete(coupons);
+    }
+
+    // 0b. DELETE reservations in batch
+    const newResIds = (data.reservations || []).map((r: any) => r.id);
+    if (newResIds.length > 0) {
+      await tx.delete(reservations).where(notInArray(reservations.id, newResIds));
+    } else {
+      await tx.delete(reservations);
     }
 
     // 1. DELETE bookings & gallery in batch
@@ -127,7 +139,36 @@ export async function writeDb(data: DbState) {
             earlybird_price_cents: sql`EXCLUDED.earlybird_price_cents`,
             couple_price_cents: sql`EXCLUDED.couple_price_cents`,
             status: sql`EXCLUDED.status`,
+            doors_open: sql`EXCLUDED.doors_open`,
+            reservation_mode: sql`EXCLUDED.reservation_mode`,
+            ticket_sales_mode: sql`EXCLUDED.ticket_sales_mode`,
+            reservation_limit: sql`EXCLUDED.reservation_limit`,
+            reservation_deadline: sql`EXCLUDED.reservation_deadline`,
+            early_access_duration_hours: sql`EXCLUDED.early_access_duration_hours`,
+            auto_switch: sql`EXCLUDED.auto_switch`,
             updated_at: sql`EXCLUDED.updated_at`
+          }
+        });
+    }
+
+    // 5. Batch UPSERT reservations
+    if (data.reservations && data.reservations.length > 0) {
+      await tx.insert(reservations)
+        .values(data.reservations)
+        .onConflictDoUpdate({
+          target: reservations.id,
+          set: {
+            event_id: sql`EXCLUDED.event_id`,
+            full_name: sql`EXCLUDED.full_name`,
+            phone_number: sql`EXCLUDED.phone_number`,
+            email: sql`EXCLUDED.email`,
+            instagram_username: sql`EXCLUDED.instagram_username`,
+            passes_count: sql`EXCLUDED.passes_count`,
+            group_size: sql`EXCLUDED.group_size`,
+            coupon_code: sql`EXCLUDED.coupon_code`,
+            access_token: sql`EXCLUDED.access_token`,
+            status: sql`EXCLUDED.status`,
+            notified_at: sql`EXCLUDED.notified_at`
           }
         });
     }

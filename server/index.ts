@@ -24,6 +24,7 @@ import authRouter from './routes/auth.ts';
 import eventsRouter from './routes/events.ts';
 import bookingsRouter from './routes/bookings.ts';
 import adminRouter from './routes/admin.ts';
+import reservationsRouter from './routes/reservations.ts';
 
 import { requireAuth, requireAdmin, getOrCreateUser, AuthRequest } from './middleware/auth.ts';
 import { readDb, writeDb } from './services/db.ts';
@@ -103,6 +104,7 @@ async function initDb() {
               earlybird_price_cents INTEGER NOT NULL,
               couple_price_cents INTEGER NOT NULL,
               status TEXT NOT NULL,
+              doors_open TEXT,
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
@@ -161,6 +163,22 @@ async function initDb() {
               created_at TEXT NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS reservations (
+              id TEXT PRIMARY KEY,
+              event_id TEXT NOT NULL,
+              full_name TEXT NOT NULL,
+              phone_number TEXT NOT NULL,
+              email TEXT NOT NULL,
+              instagram_username TEXT,
+              passes_count INTEGER NOT NULL DEFAULT 1,
+              group_size INTEGER NOT NULL DEFAULT 1,
+              coupon_code TEXT,
+              access_token TEXT NOT NULL UNIQUE,
+              status TEXT NOT NULL DEFAULT 'confirmed',
+              notified_at TEXT,
+              created_at TEXT NOT NULL
+            );
+
             -- Ensure all new columns exist on existing tables (Safe idempotent ALTERs)
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS ticket_id TEXT;
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS utr TEXT;
@@ -174,6 +192,13 @@ async function initDb() {
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS coupon_code TEXT;
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS discount_cents INTEGER;
             ALTER TABLE bookings ADD COLUMN IF NOT EXISTS additional_guests TEXT;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS doors_open TEXT;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS reservation_mode BOOLEAN DEFAULT TRUE;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS ticket_sales_mode BOOLEAN DEFAULT FALSE;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS reservation_limit INTEGER DEFAULT 1000;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS reservation_deadline TEXT;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS early_access_duration_hours INTEGER DEFAULT 24;
+            ALTER TABLE events ADD COLUMN IF NOT EXISTS auto_switch BOOLEAN DEFAULT TRUE;
           `);
           console.log('Database schema safety sync executed successfully!');
         } finally {
@@ -192,6 +217,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/events', eventsRouter);
 app.use('/api/bookings', bookingsRouter);
 app.use('/api/admin', adminRouter);
+app.use('/api/reservations', reservationsRouter);
 
 // Ticket PDF download endpoint (/api/tickets/:id/download or /api/tickets/:id/pdf)
 app.get(['/api/tickets/:id/download', '/api/tickets/:id/pdf'], async (req, res: any) => {
