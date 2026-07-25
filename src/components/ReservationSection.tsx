@@ -176,7 +176,7 @@ export default function ReservationSection({
             <div>
               <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-violet-500/10 border border-violet-500/30 text-violet-300 text-xs font-mono uppercase tracking-widest mb-3">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span>Status: Reservations Open</span>
+                <span>Passes Live Soon! • Spot Reservations Open</span>
               </div>
               <h2 className="font-serif text-2xl md:text-3xl font-bold text-white tracking-tight">
                 Reserve Your Spot
@@ -199,25 +199,7 @@ export default function ReservationSection({
             </div>
           </div>
 
-          {/* Live Reserved Counter & Progress Bar */}
-          <div className="bg-neutral-950/40 border border-white/5 rounded-xl p-5 space-y-3">
-            <div className="flex justify-between items-center text-xs font-mono">
-              <div className="flex items-center space-x-2 text-neutral-300">
-                <Users className="w-4 h-4 text-violet-400" />
-                <span>Reserved Spots: <strong className="text-white text-sm">{reservedCount}</strong> / {limit}</span>
-              </div>
-              <span className="px-2.5 py-1 rounded bg-violet-500/20 text-violet-300 font-bold border border-violet-500/30">
-                {remainingSpots} Spots Left
-              </span>
-            </div>
 
-            <div className="w-full bg-neutral-800/80 rounded-full h-2.5 overflow-hidden p-0.5 border border-white/5">
-              <div
-                className="bg-gradient-to-r from-violet-600 to-fuchsia-500 h-full rounded-full transition-all duration-700 ease-out"
-                style={{ width: `${reservedPercent}%` }}
-              ></div>
-            </div>
-          </div>
 
           {/* Confirmation View vs Form View */}
           <AnimatePresence mode="wait">

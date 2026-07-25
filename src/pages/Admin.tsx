@@ -418,6 +418,9 @@ export default function Admin({
   const [eventReservationDeadline, setEventReservationDeadline] = useState<string>('');
   const [eventEarlyAccessDurationHours, setEventEarlyAccessDurationHours] = useState<number>(24);
   const [eventAutoSwitch, setEventAutoSwitch] = useState<boolean>(true);
+  const [eventHideVenue, setEventHideVenue] = useState<boolean>(false);
+  const [eventHideDate, setEventHideDate] = useState<boolean>(false);
+  const [eventHidePrice, setEventHidePrice] = useState<boolean>(false);
 
   const [savingEvent, setSavingEvent] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -483,6 +486,9 @@ export default function Admin({
     }
     setEventEarlyAccessDurationHours(ev.early_access_duration_hours ?? 24);
     setEventAutoSwitch(ev.auto_switch ?? true);
+    setEventHideVenue(ev.hide_venue ?? false);
+    setEventHideDate(ev.hide_date ?? false);
+    setEventHidePrice(ev.hide_price ?? false);
   };
 
   const handleResetEventForm = () => {
@@ -511,6 +517,9 @@ export default function Admin({
     setEventReservationDeadline(new Date(defaultDeadline.getTime() - off).toISOString().slice(0, 16));
     setEventEarlyAccessDurationHours(24);
     setEventAutoSwitch(true);
+    setEventHideVenue(false);
+    setEventHideDate(false);
+    setEventHidePrice(false);
   };
 
   const handleSaveEvent = async (e: React.FormEvent) => {
@@ -548,6 +557,9 @@ export default function Admin({
           reservation_deadline: eventReservationDeadline ? new Date(eventReservationDeadline).toISOString() : new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(),
           early_access_duration_hours: eventEarlyAccessDurationHours,
           auto_switch: eventAutoSwitch,
+          hide_venue: eventHideVenue,
+          hide_date: eventHideDate,
+          hide_price: eventHidePrice,
         }),
       });
 
@@ -1820,6 +1832,38 @@ export default function Admin({
                     onChange={(e) => setEventAutoSwitch(e.target.checked)}
                     className="h-4 w-4 accent-violet-600"
                   />
+                </div>
+
+                {/* Display Visibility Toggles */}
+                <div className="space-y-2 pt-3 border-t border-neutral-100 dark:border-neutral-900">
+                  <label className="text-[10px] font-mono text-neutral-400 uppercase font-bold tracking-wider">Field Visibility Controls</label>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[11px] font-mono text-neutral-600 dark:text-neutral-400">Hide Venue & Location</span>
+                    <input
+                      type="checkbox"
+                      checked={eventHideVenue}
+                      onChange={(e) => setEventHideVenue(e.target.checked)}
+                      className="h-4 w-4 accent-violet-600 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[11px] font-mono text-neutral-600 dark:text-neutral-400">Hide Date & Time</span>
+                    <input
+                      type="checkbox"
+                      checked={eventHideDate}
+                      onChange={(e) => setEventHideDate(e.target.checked)}
+                      className="h-4 w-4 accent-violet-600 cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-[11px] font-mono text-neutral-600 dark:text-neutral-400">Hide Price Display</span>
+                    <input
+                      type="checkbox"
+                      checked={eventHidePrice}
+                      onChange={(e) => setEventHidePrice(e.target.checked)}
+                      className="h-4 w-4 accent-violet-600 cursor-pointer"
+                    />
+                  </div>
                 </div>
               </div>
 

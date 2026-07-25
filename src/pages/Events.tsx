@@ -116,10 +116,12 @@ export default function Events({
 
                 {/* Event Metadata */}
                 <div className="p-6 flex flex-col flex-grow">
-                  <div className="flex items-center space-x-1.5 text-[11px] font-mono tracking-wider text-neutral-400 uppercase mb-3">
-                    <Calendar className="h-3.5 w-3.5" />
-                    <span>{formatDate(event.event_date)}</span>
-                  </div>
+                  {!event.hide_date && (
+                    <div className="flex items-center space-x-1.5 text-[11px] font-mono tracking-wider text-neutral-400 uppercase mb-3">
+                      <Calendar className="h-3.5 w-3.5" />
+                      <span>{formatDate(event.event_date)}</span>
+                    </div>
+                  )}
                   
                   <h3 className="font-serif text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-neutral-500 transition-colors mb-3">
                     {event.title}
@@ -129,18 +131,28 @@ export default function Events({
                     {event.teaser}
                   </p>
 
-                  <div className="flex items-center space-x-1.5 text-xs font-mono text-neutral-400 mb-5">
-                    <MapPin className="h-3.5 w-3.5 text-neutral-400" />
-                    <span>{event.location}</span>
-                  </div>
+                  {!event.hide_venue && (
+                    <div className="flex items-center space-x-1.5 text-xs font-mono text-neutral-400 mb-5">
+                      <MapPin className="h-3.5 w-3.5 text-neutral-400" />
+                      <span>{event.location}</span>
+                    </div>
+                  )}
 
                   {/* Actions/Price Bar */}
                   <div className="flex items-center justify-between pt-4 border-t border-neutral-100 dark:border-neutral-900">
                     <span className="font-mono text-xs text-neutral-400">
-                      From {formatPrice(Math.min(event.general_price_cents, event.vip_price_cents || Infinity))}
+                      {!event.hide_price ? (
+                        event.general_price_cents > 0 && !event.reservation_mode ? (
+                          `From ${formatPrice(Math.min(event.general_price_cents, event.vip_price_cents || Infinity))}`
+                        ) : (
+                          <span className="text-violet-600 dark:text-violet-400 font-bold uppercase tracking-wider text-[11px]">
+                            Passes Live Soon!
+                          </span>
+                        )
+                      ) : null}
                     </span>
                     <span className="text-xs font-mono text-neutral-900 dark:text-white group-hover:underline flex items-center space-x-1">
-                      <span>{isSoldOut ? 'Sold Out' : 'Reserve Spot'}</span>
+                      <span>{isSoldOut ? 'Sold Out' : (event.reservation_mode ? 'Reserve Spot' : 'Get Tickets')}</span>
                       <ArrowRight className="h-3 w-3" />
                     </span>
                   </div>

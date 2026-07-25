@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { Calendar, MapPin, Ticket, ShieldCheck, AlertCircle, Users, ArrowLeft } from 'lucide-react';
+import { Calendar, MapPin, Ticket, ShieldCheck, AlertCircle, Users, ArrowLeft, Sparkles } from 'lucide-react';
 import { Event, TicketTier, User, Booking } from '../types';
 import { apiFetch } from '../lib/api';
 import LoadingOverlay from '../components/LoadingOverlay';
@@ -407,33 +407,46 @@ export default function EventDetail({
           </h1>
 
           {/* Quick Date / Location */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-y border-neutral-100 dark:border-neutral-900 py-5">
-            <div className="flex items-start space-x-3">
-              <Calendar className="h-5 w-5 text-neutral-400 mt-0.5" />
-              <div>
-                <p className="text-xs font-mono text-neutral-400 uppercase">DATE &amp; TIME</p>
-                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{formatDate(event.event_date)}</p>
-                <p className="text-xs text-neutral-400 mt-0.5">Doors open {event.doors_open || '20:00 IST'}</p>
-              </div>
+          {(!event.hide_date || !event.hide_venue) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-y border-neutral-100 dark:border-neutral-900 py-5">
+              {!event.hide_date && (
+                <div className="flex items-start space-x-3">
+                  <Calendar className="h-5 w-5 text-neutral-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-mono text-neutral-400 uppercase">DATE &amp; TIME</p>
+                    <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{formatDate(event.event_date)}</p>
+                    <p className="text-xs text-neutral-400 mt-0.5">Doors open {event.doors_open || '20:00 IST'}</p>
+                  </div>
+                </div>
+              )}
+              {!event.hide_venue && (
+                <div className="flex items-start space-x-3">
+                  <MapPin className="h-5 w-5 text-neutral-400 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-mono text-neutral-400 uppercase">LOCATION &amp; VENUE</p>
+                    <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{event.location}</p>
+                    <p className="text-xs text-neutral-400 mt-0.5">Venue details shared on checkout</p>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-start space-x-3">
-              <MapPin className="h-5 w-5 text-neutral-400 mt-0.5" />
-              <div>
-                <p className="text-xs font-mono text-neutral-400 uppercase">LOCATION &amp; VENUE</p>
-                <p className="text-sm font-medium text-neutral-800 dark:text-neutral-200">{event.location}</p>
-                <p className="text-xs text-neutral-400 mt-0.5">Venue details shared on checkout</p>
-              </div>
-            </div>
-          </div>
+          )}
 
-          <div className="prose prose-neutral dark:prose-invert max-w-none text-sm leading-relaxed font-light text-neutral-600 dark:text-neutral-400 space-y-4">
-            <p className="text-base text-neutral-800 dark:text-neutral-300 font-normal">
-              {event.teaser}
-            </p>
-            {event.description.split('\n\n').map((para, i) => (
-              <p key={i}>{para}</p>
-            ))}
-          </div>
+          {/* Clean Description / Teaser Handling */}
+          {((event.teaser && event.teaser.trim() !== 'Teensparty') || (event.description && event.description.trim() !== 'HI')) && (
+            <div className="prose prose-neutral dark:prose-invert max-w-none text-sm leading-relaxed font-light text-neutral-600 dark:text-neutral-400 space-y-4">
+              {event.teaser && event.teaser.trim() !== 'Teensparty' && (
+                <p className="text-base text-neutral-800 dark:text-neutral-300 font-normal">
+                  {event.teaser}
+                </p>
+              )}
+              {event.description && event.description.trim() !== 'HI' && (
+                event.description.split('\n\n').map((para, i) => (
+                  <p key={i}>{para}</p>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right Aspect - Hero Image Banner */}

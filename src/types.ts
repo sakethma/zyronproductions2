@@ -26,6 +26,9 @@ export interface Event {
   couple_price_cents: number;
   status: EventStatus;
   doors_open?: string;
+  hide_venue?: boolean;
+  hide_date?: boolean;
+  hide_price?: boolean;
   reservation_mode?: boolean;
   ticket_sales_mode?: boolean;
   reservation_limit?: number;

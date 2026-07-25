@@ -52,7 +52,8 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
   const {
     id, title, teaser, description, event_date, location, image_url,
     capacity, general_price, vip_price, group_price, earlybird_price, couple_price, status, doors_open,
-    reservation_mode, ticket_sales_mode, reservation_limit, reservation_deadline, early_access_duration_hours, auto_switch
+    reservation_mode, ticket_sales_mode, reservation_limit, reservation_deadline, early_access_duration_hours, auto_switch,
+    hide_venue, hide_date, hide_price
   } = req.body;
 
   if (!title || !location || !event_date || !capacity) {
@@ -105,6 +106,9 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
         couple_price_cents,
         status: status || 'draft',
         doors_open: doors_open || '20:00 IST',
+        hide_venue: hide_venue !== undefined ? Boolean(hide_venue) : (existing.hide_venue ?? false),
+        hide_date: hide_date !== undefined ? Boolean(hide_date) : (existing.hide_date ?? false),
+        hide_price: hide_price !== undefined ? Boolean(hide_price) : (existing.hide_price ?? false),
         reservation_mode: reservation_mode !== undefined ? Boolean(reservation_mode) : (existing.reservation_mode ?? true),
         ticket_sales_mode: ticket_sales_mode !== undefined ? Boolean(ticket_sales_mode) : (existing.ticket_sales_mode ?? false),
         reservation_limit: reservation_limit !== undefined ? parseInt(reservation_limit) : (existing.reservation_limit ?? 1000),
@@ -135,6 +139,9 @@ router.post('/events', requireAdmin, async (req: AuthRequest, res: any) => {
         couple_price_cents,
         status: status || 'draft',
         doors_open: doors_open || '20:00 IST',
+        hide_venue: hide_venue !== undefined ? Boolean(hide_venue) : false,
+        hide_date: hide_date !== undefined ? Boolean(hide_date) : false,
+        hide_price: hide_price !== undefined ? Boolean(hide_price) : false,
         reservation_mode: reservation_mode !== undefined ? Boolean(reservation_mode) : true,
         ticket_sales_mode: ticket_sales_mode !== undefined ? Boolean(ticket_sales_mode) : false,
         reservation_limit: reservation_limit !== undefined ? parseInt(reservation_limit) : 1000,

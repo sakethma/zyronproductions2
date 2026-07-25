@@ -229,9 +229,11 @@ export default function Home({
 
                 {/* Content */}
                 <div className="p-6 flex flex-col flex-grow">
-                  <div className="text-[11px] font-mono tracking-wider text-neutral-400 uppercase mb-2">
-                    {formatDate(event.event_date)}
-                  </div>
+                  {!event.hide_date && (
+                    <div className="text-[11px] font-mono tracking-wider text-neutral-400 uppercase mb-2">
+                      {formatDate(event.event_date)}
+                    </div>
+                  )}
                   <h3 className="font-serif text-xl font-semibold text-neutral-900 dark:text-white group-hover:text-neutral-500 transition-colors mb-2.5">
                     {event.title}
                   </h3>
@@ -241,10 +243,18 @@ export default function Home({
                   
                   <div className="flex items-center justify-between pt-4 border-t border-neutral-100 dark:border-neutral-900">
                     <span className="font-mono text-xs text-neutral-400">
-                      From {formatPrice(Math.min(event.general_price_cents, event.vip_price_cents || Infinity))}
+                      {!event.hide_price ? (
+                        event.general_price_cents > 0 && !event.reservation_mode ? (
+                          `From ${formatPrice(Math.min(event.general_price_cents, event.vip_price_cents || Infinity))}`
+                        ) : (
+                          <span className="text-violet-600 dark:text-violet-400 font-bold uppercase tracking-wider text-[11px]">
+                            Passes Live Soon!
+                          </span>
+                        )
+                      ) : null}
                     </span>
                     <span className="text-xs font-mono text-neutral-900 dark:text-white group-hover:underline flex items-center space-x-1">
-                      <span>Reserve</span>
+                      <span>{event.reservation_mode ? 'Reserve' : 'Book'}</span>
                       <ArrowRight className="h-3 w-3" />
                     </span>
                   </div>
