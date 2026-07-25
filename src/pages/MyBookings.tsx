@@ -21,7 +21,9 @@ export default function MyBookings({
   setSelectedEventSlug,
 }: MyBookingsProps) {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [reservations, setReservations] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [deletingResId, setDeletingResId] = useState<string | null>(null);
   
   // Dialog States
   const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
@@ -42,7 +44,7 @@ export default function MyBookings({
   const [submittingPayment, setSubmittingPayment] = useState(false);
 
   const fetchBookings = () => {
-    if (bookings.length === 0) setIsLoading(true);
+    if (bookings.length === 0 && reservations.length === 0) setIsLoading(true);
     apiFetch('/api/bookings/my')
       .then((res) => {
         if (!res.ok) throw new Error('Failed to load bookings');
@@ -60,6 +62,34 @@ export default function MyBookings({
         console.error("Failed to fetch bookings:", err);
         setIsLoading(false);
       });
+
+    apiFetch('/api/reservations/my')
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setReservations(data);
+        }
+      })
+      .catch(() => {});
+  };
+
+  const handleDeleteReservation = async (id: string) => {
+    if (!window.confirm('Are you sure you want to cancel and delete this pre-sale spot reservation?')) {
+      return;
+    }
+    setDeletingResId(id);
+    try {
+      const res = await apiFetch(`/api/reservations/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to cancel spot reservation.');
+      triggerToast('Pre-sale spot reservation deleted successfully.');
+      setReservations((prev) => prev.filter((item) => item.id !== id && item.access_token !== id));
+      fetchBookings();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error deleting spot reservation.');
+    } finally {
+      setDeletingResId(null);
+    }
   };
 
   useEffect(() => {
@@ -293,16 +323,81 @@ export default function MyBookings({
         </p>
       </div>
 
+      {/* Pre-Sale Spot Reservations Section */}
+      {reservations.length > 0 && (
+        <div className="mb-12 space-y-4">
+          <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 pb-3">
+            <h2 className="font-serif text-2xl font-bold text-amber-600 dark:text-amber-500 flex items-center gap-2">
+              <ShieldAlert className="h-5 w-5" />
+              Pre-Sale Spot Reservations
+            </h2>
+            <span className="font-mono text-xs text-neutral-400">
+              {reservations.length} Active Spot(s) Reserved
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {reservations.map((r) => (
+              <div
+                key={r.id}
+                className="border border-amber-500/30 bg-amber-50/10 dark:bg-amber-950/10 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4"
+              >
+                <div className="space-y-1 text-left">
+                  <div className="flex items-center space-x-2">
+                    <span className="bg-amber-500/20 text-amber-700 dark:text-amber-400 text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 font-bold">
+                      Pre-Sale Reserved
+                    </span>
+                    <span className="text-xs font-mono text-neutral-400">
+                      Token: <code className="font-bold text-neutral-900 dark:text-white select-all">{r.access_token}</code>
+                    </span>
+                  </div>
+                  <h3 className="font-serif text-lg font-bold text-neutral-900 dark:text-white">
+                    {r.event_title || 'Unknown Event'}
+                  </h3>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    Reserved for <span className="font-semibold text-neutral-900 dark:text-white">{r.full_name}</span> ({r.email}) • <span className="font-mono font-bold">{r.passes_count || 1} Pass(es)</span>
+                  </p>
+                </div>
+
+                <div className="flex items-center space-x-3 self-end md:self-center">
+                  {r.event_slug && (
+                    <button
+                      onClick={() => {
+                        setSelectedEventSlug(r.event_slug);
+                        setCurrentRoute(`/events/${r.event_slug}?access_token=${r.access_token}`);
+                      }}
+                      className="bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 px-4 py-2 text-xs font-mono uppercase tracking-wider font-bold hover:bg-neutral-800 dark:hover:bg-neutral-100 transition-colors cursor-pointer"
+                    >
+                      Use Token &rarr;
+                    </button>
+                  )}
+                  <button
+                    id={`delete-reservation-${r.id}`}
+                    onClick={() => handleDeleteReservation(r.id)}
+                    disabled={deletingResId === r.id}
+                    className="border border-red-300 dark:border-red-900/50 hover:bg-red-500/10 text-red-600 dark:text-red-400 px-3 py-2 text-xs font-mono uppercase tracking-wider font-bold transition-colors cursor-pointer flex items-center space-x-1 disabled:opacity-50"
+                    title="Delete or cancel this reservation"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>{deletingResId === r.id ? 'Deleting...' : 'Delete Reservation'}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 space-y-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600"></div>
           <p className="font-mono text-xs tracking-wider text-neutral-400 uppercase">Retrieving your bookings...</p>
         </div>
-      ) : bookings.length === 0 ? (
+      ) : bookings.length === 0 && reservations.length === 0 ? (
         <div className="border border-neutral-200 dark:border-neutral-800 py-24 text-center">
           <Ticket className="h-12 w-12 text-neutral-300 mx-auto mb-4 animate-bounce" />
           <p className="text-neutral-500 dark:text-neutral-400 font-light font-sans text-sm mb-6">
-            You do not have any bookings registered under your account yet.
+            You do not have any bookings or spot reservations registered under your account yet.
           </p>
           <button
             id="browse-experiences-bookings"

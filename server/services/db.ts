@@ -35,15 +35,15 @@ export async function readDb(): Promise<DbState> {
 }
 
 export async function writeDb(data: DbState) {
-  const hasSql = !!process.env.SQL_HOST || !!process.env.DATABASE_URL;
-  if (!hasSql) {
+  // Always update JSON file backup
+  try {
     const DB_DIR = path.join(process.cwd(), 'data');
     const DB_PATH = path.join(DB_DIR, 'db.json');
-    const usersForJson = data.users.map((u: any) => {
+    const usersForJson = (data.users || []).map((u: any) => {
       const { id, ...rest } = u;
       return { ...rest, uid: u.uid || id };
     });
-    const notificationsForJson = data.notifications.map((n: any) => {
+    const notificationsForJson = (data.notifications || []).map((n: any) => {
       const isReadVal = n.read !== undefined ? n.read : (n.is_read !== undefined ? n.is_read : false);
       return {
         id: n.id,
@@ -56,22 +56,41 @@ export async function writeDb(data: DbState) {
     });
     const jsonData = {
       users: usersForJson,
-      events: data.events,
-      bookings: data.bookings,
-      gallery_items: data.gallery_items,
+      events: data.events || [],
+      bookings: data.bookings || [],
+      gallery_items: data.gallery_items || [],
       notifications: notificationsForJson,
       coupons: data.coupons || [],
       reservations: data.reservations || []
     };
     await fs.mkdir(DB_DIR, { recursive: true });
     await fs.writeFile(DB_PATH, JSON.stringify(jsonData, null, 2), 'utf-8');
-    return;
+  } catch (jsonErr) {
+    console.warn('JSON file backup write warning:', jsonErr);
   }
 
-  // Drizzle Transactions for batch operations & performance!
-  await drizzleDb.transaction(async (tx) => {
+  // Always sync Drizzle DB (SQLite / Postgres)
+  try {
+    await drizzleDb.transaction(async (tx) => {
+    // Sanitize reservations records to prevent extra properties (like event_title, event_slug) from breaking Drizzle insert
+    const sanitizedReservations = (data.reservations || []).map((r: any) => ({
+      id: String(r.id),
+      event_id: String(r.event_id),
+      full_name: String(r.full_name || r.guest_name || '').trim(),
+      phone_number: String(r.phone_number || r.guest_phone || '').trim(),
+      email: String(r.email || r.guest_email || '').toLowerCase().trim(),
+      instagram_username: r.instagram_username ? String(r.instagram_username).trim() : null,
+      passes_count: typeof r.passes_count === 'number' ? r.passes_count : (parseInt(r.passes_count) || 1),
+      group_size: typeof r.group_size === 'number' ? r.group_size : (parseInt(r.group_size) || 1),
+      coupon_code: r.coupon_code ? String(r.coupon_code).trim() : null,
+      access_token: String(r.access_token || '').trim(),
+      status: r.status ? String(r.status) : 'confirmed',
+      notified_at: r.notified_at ? String(r.notified_at) : null,
+      created_at: r.created_at ? String(r.created_at) : new Date().toISOString()
+    })).filter(r => r.id && r.event_id);
+
     // 0. DELETE coupons in batch
-    const newCouponIds = (data.coupons || []).map((c: any) => c.id);
+    const newCouponIds = (data.coupons || []).map((c: any) => c.id).filter(Boolean);
     if (newCouponIds.length > 0) {
       await tx.delete(coupons).where(notInArray(coupons.id, newCouponIds));
     } else {
@@ -79,7 +98,7 @@ export async function writeDb(data: DbState) {
     }
 
     // 0b. DELETE reservations in batch
-    const newResIds = (data.reservations || []).map((r: any) => r.id);
+    const newResIds = sanitizedReservations.map((r: any) => r.id).filter(Boolean);
     if (newResIds.length > 0) {
       await tx.delete(reservations).where(notInArray(reservations.id, newResIds));
     } else {
@@ -87,14 +106,14 @@ export async function writeDb(data: DbState) {
     }
 
     // 1. DELETE bookings & gallery in batch
-    const newBookingIds = data.bookings.map((b: any) => b.id);
+    const newBookingIds = data.bookings.map((b: any) => b.id).filter(Boolean);
     if (newBookingIds.length > 0) {
       await tx.delete(bookings).where(notInArray(bookings.id, newBookingIds));
     } else {
       await tx.delete(bookings);
     }
 
-    const newGalleryIds = data.gallery_items.map((g: any) => g.id);
+    const newGalleryIds = data.gallery_items.map((g: any) => g.id).filter(Boolean);
     if (newGalleryIds.length > 0) {
       await tx.delete(galleryItems).where(notInArray(galleryItems.id, newGalleryIds));
     } else {
@@ -102,7 +121,7 @@ export async function writeDb(data: DbState) {
     }
 
     // 2. DELETE events in batch
-    const newEventIds = data.events.map((e: any) => e.id);
+    const newEventIds = data.events.map((e: any) => e.id).filter(Boolean);
     if (newEventIds.length > 0) {
       await tx.delete(events).where(notInArray(events.id, newEventIds));
     } else {
@@ -110,7 +129,7 @@ export async function writeDb(data: DbState) {
     }
 
     // 3. DELETE notifications in batch
-    const newNotifIds = data.notifications.map((n: any) => n.id);
+    const newNotifIds = data.notifications.map((n: any) => n.id).filter(Boolean);
     if (newNotifIds.length > 0) {
       await tx.delete(notifications).where(notInArray(notifications.id, newNotifIds));
     } else {
@@ -152,9 +171,9 @@ export async function writeDb(data: DbState) {
     }
 
     // 5. Batch UPSERT reservations
-    if (data.reservations && data.reservations.length > 0) {
+    if (sanitizedReservations.length > 0) {
       await tx.insert(reservations)
-        .values(data.reservations)
+        .values(sanitizedReservations)
         .onConflictDoUpdate({
           target: reservations.id,
           set: {
@@ -273,4 +292,7 @@ export async function writeDb(data: DbState) {
         });
     }
   });
+  } catch (dbErr) {
+    console.warn('Drizzle DB sync warning:', dbErr);
+  }
 }

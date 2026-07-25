@@ -33,7 +33,7 @@ export interface SendMailResult {
 }
 
 export interface SendMailParams {
-  to: string | { email: string; name?: string }[];
+  to: any;
   subject: string;
   html?: string;
   htmlContent?: string;
@@ -41,20 +41,67 @@ export interface SendMailParams {
   textContent?: string;
 }
 
+export function normalizeTo(to: any): { email: string; name?: string }[] {
+  if (!to) return [];
+
+  if (typeof to === 'string') {
+    return to.split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+      .map(s => {
+        const parsed = parseFromAddress(s);
+        return {
+          email: parsed.email,
+          name: parsed.name !== 'Zyron Productions' ? parsed.name : undefined
+        };
+      })
+      .filter(item => item.email && item.email.includes('@'));
+  }
+
+  if (Array.isArray(to)) {
+    const list: { email: string; name?: string }[] = [];
+    for (const item of to) {
+      if (typeof item === 'string' && item.trim()) {
+        const parsed = parseFromAddress(item);
+        if (parsed.email && parsed.email.includes('@')) {
+          list.push({ email: parsed.email, name: parsed.name !== 'Zyron Productions' ? parsed.name : undefined });
+        }
+      } else if (item && typeof item === 'object') {
+        const email = (item.email || item.guest_email || '').trim();
+        const name = item.name || item.guest_name || undefined;
+        if (email && email.includes('@')) {
+          list.push({ email, name });
+        }
+      }
+    }
+    return list;
+  }
+
+  if (typeof to === 'object') {
+    const email = (to.email || to.guest_email || '').trim();
+    const name = to.name || to.guest_name || undefined;
+    if (email && email.includes('@')) {
+      return [{ email, name }];
+    }
+  }
+
+  return [];
+}
+
 export async function sendMailViaBrevoApi({ to, subject, html, htmlContent, text, textContent }: SendMailParams): Promise<SendMailResult> {
   if (!brevoApiKey) {
     throw new Error('Brevo API key is not configured.');
   }
 
-  const fromStr = cleanEnvVar(process.env.SMTP_FROM) || 'Zyron Productions <tickets@zyronproduction.work.gd>';
+  const fromStr = 'zyronproductions <tickets@zyronproduction.work.gd>';
   const parsedFrom = parseFromAddress(fromStr);
 
-  // Normalize recipient (to) from either string or array
-  let formattedTo: { email: string; name?: string }[] = [];
-  if (typeof to === 'string') {
-    formattedTo = [{ email: to }];
-  } else if (Array.isArray(to)) {
-    formattedTo = to;
+  // Normalize recipient (to) from string, array, or object
+  const formattedTo = normalizeTo(to);
+
+  if (formattedTo.length === 0) {
+    console.error('[Email] Cannot send email: Recipient address ("to") is missing, empty, or invalid:', to);
+    return { success: false, error: 'Recipient email address ("to") is missing or invalid.' };
   }
 
   // Normalize HTML and Text content keys
@@ -131,8 +178,27 @@ function escapeHtml(unsafe: any): string {
 
 export async function sendConfirmationEmail(booking: any, event: any, downloadUrl?: string) {
   try {
+    // If called directly as sendConfirmationEmail(emailStr, subjectStr, htmlStr)
+    if (typeof booking === 'string') {
+      const recipientEmail = booking;
+      const subjectStr = typeof event === 'string' ? event : 'Zyron Event Notification';
+      const htmlContentStr = typeof downloadUrl === 'string' ? downloadUrl : (typeof event === 'object' && (event?.html || event?.htmlContent) ? (event.html || event.htmlContent) : '');
+
+      return await sendMail({
+        to: recipientEmail,
+        subject: subjectStr,
+        html: htmlContentStr
+      });
+    }
+
+    const recipientEmail = booking?.guest_email || booking?.email;
+    if (!recipientEmail) {
+      console.warn('[Confirmation Email] Cannot send email: recipient email missing on booking object:', booking);
+      return { success: false, error: 'Recipient email missing on booking object' };
+    }
+
     const escapedEventTitle = escapeHtml(event?.title || 'Zyron Event');
-    const escapedGuestName = escapeHtml(booking?.guest_name || 'VIP Guest');
+    const escapedGuestName = escapeHtml(booking?.guest_name || booking?.full_name || booking?.name || 'VIP Guest');
     const escapedBookingId = escapeHtml(booking?.id || '');
     const rawTicketId = booking?.ticket_id || (booking?.id ? booking.id.substring(0, 8).toUpperCase() : 'TK0000');
     const escapedTicketId = escapeHtml(rawTicketId);
@@ -286,7 +352,7 @@ export async function sendConfirmationEmail(booking: any, event: any, downloadUr
     `;
 
     const result = await sendMail({
-      to: booking.guest_email,
+      to: recipientEmail,
       subject: `Booking Confirmed: ${event.title} 🎉`,
       html
     });

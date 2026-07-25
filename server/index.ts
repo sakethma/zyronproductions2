@@ -31,7 +31,7 @@ import { readDb, writeDb } from './services/db.ts';
 import { sendMail, brevoApiKey } from './services/email.ts';
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = 3000;
 
 app.use(express.json({ limit: '25mb', type: ['application/json', 'text/plain'] }));
 app.use(express.urlencoded({ limit: '25mb', extended: true }));

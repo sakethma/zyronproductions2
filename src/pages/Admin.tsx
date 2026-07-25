@@ -833,13 +833,14 @@ export default function Admin({
       if (!response.ok) {
         throw new Error(data.error || 'Database reset failed.');
       }
-      triggerToast('DATABASE RESET SUCCESSFUL: All bookings cleared.');
+      triggerToast('DATABASE RESET SUCCESSFUL: All bookings and spot reservations cleared.');
       refetchEvents();
       if (selectedEventId) {
         fetchGuests(selectedEventId);
       }
       fetchAdminEvents();
       fetchAnalytics();
+      fetchReservations();
     } catch (err: any) {
       triggerToast(err.message || 'Error executing database reset.');
     } finally {
@@ -854,6 +855,25 @@ export default function Admin({
   const [reservationEventFilter, setReservationEventFilter] = useState('all');
   const [downloadingReservationsCsv, setDownloadingReservationsCsv] = useState(false);
   const [triggeringPhaseSwitchId, setTriggeringPhaseSwitchId] = useState<string | null>(null);
+  const [selectedReservationIds, setSelectedReservationIds] = useState<string[]>([]);
+  const [deletingReservationId, setDeletingReservationId] = useState<string | null>(null);
+  const [deletingBatchReservations, setDeletingBatchReservations] = useState(false);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+
+  const handleResendReservationEmail = async (id: string, name: string) => {
+    setResendingEmailId(id);
+    try {
+      const res = await apiFetch(`/api/reservations/admin/resend-email/${id}`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send email.');
+      triggerToast(`Priority access email dispatched to ${name}!`);
+      fetchReservations();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error sending notification email.');
+    } finally {
+      setResendingEmailId(null);
+    }
+  };
 
   const fetchReservations = () => {
     setLoadingReservations(true);
@@ -877,6 +897,66 @@ export default function Admin({
       fetchReservations();
     }
   }, [activeTab]);
+
+  const handleSelectReservation = (id: string, checked: boolean) => {
+    if (checked) {
+      setSelectedReservationIds((prev) => [...prev, id]);
+    } else {
+      setSelectedReservationIds((prev) => prev.filter((item) => item !== id));
+    }
+  };
+
+  const handleSelectAllFilteredReservations = (filteredIds: string[], checked: boolean) => {
+    if (checked) {
+      setSelectedReservationIds((prev) => Array.from(new Set([...prev, ...filteredIds])));
+    } else {
+      const idSet = new Set(filteredIds);
+      setSelectedReservationIds((prev) => prev.filter((id) => !idSet.has(id)));
+    }
+  };
+
+  const handleDeleteSingleReservation = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete the spot reservation for "${name}"? This action cannot be undone.`)) {
+      return;
+    }
+    setDeletingReservationId(id);
+    try {
+      const res = await apiFetch(`/api/reservations/admin/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete reservation.');
+      triggerToast('Reservation deleted successfully.');
+      setSelectedReservationIds((prev) => prev.filter((item) => item !== id));
+      fetchReservations();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error deleting reservation.');
+    } finally {
+      setDeletingReservationId(null);
+    }
+  };
+
+  const handleDeleteSelectedReservations = async () => {
+    if (selectedReservationIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedReservationIds.length} selected reservation(s)? This action cannot be undone.`)) {
+      return;
+    }
+    setDeletingBatchReservations(true);
+    try {
+      const res = await apiFetch('/api/reservations/admin/batch-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selectedReservationIds }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete reservations.');
+      triggerToast(`Successfully deleted ${data.deletedCount || selectedReservationIds.length} reservation(s).`);
+      setSelectedReservationIds([]);
+      fetchReservations();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error deleting selected reservations.');
+    } finally {
+      setDeletingBatchReservations(false);
+    }
+  };
 
   const handleExportReservationsCSV = async () => {
     setDownloadingReservationsCsv(true);
@@ -2507,6 +2587,19 @@ export default function Admin({
             </div>
 
             <div className="flex items-center space-x-3 shrink-0">
+              {selectedReservationIds.length > 0 && (
+                <button
+                  id="btn-delete-selected-reservations"
+                  onClick={handleDeleteSelectedReservations}
+                  disabled={deletingBatchReservations}
+                  className="flex items-center space-x-2 bg-red-600 hover:bg-red-500 text-white px-3.5 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 border border-red-500/30 shadow-xs"
+                  title="Delete selected reservations"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  <span>{deletingBatchReservations ? 'Deleting...' : `Delete Selected (${selectedReservationIds.length})`}</span>
+                </button>
+              )}
+
               <button
                 id="btn-refresh-reservations"
                 onClick={fetchReservations}
@@ -2658,27 +2751,48 @@ export default function Admin({
                 );
               }
 
+              const allFilteredIds = filtered.map((f) => f.id);
+              const isAllFilteredSelected = allFilteredIds.length > 0 && allFilteredIds.every((id) => selectedReservationIds.includes(id));
+
               return (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs font-mono">
                     <thead className="border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 text-neutral-400 uppercase tracking-wider text-[10px]">
                       <tr>
+                        <th className="py-3.5 px-3 w-10 text-center">
+                          <input
+                            type="checkbox"
+                            checked={isAllFilteredSelected}
+                            onChange={(e) => handleSelectAllFilteredReservations(allFilteredIds, e.target.checked)}
+                            className="rounded-none border-neutral-300 dark:border-neutral-700 accent-violet-600 cursor-pointer"
+                            title="Select all reservations"
+                          />
+                        </th>
                         <th className="py-3.5 px-4 font-semibold">GUEST &amp; CONTACT</th>
                         <th className="py-3.5 px-4 font-semibold">EXPERIENCE</th>
                         <th className="py-3.5 px-4 font-semibold text-center">PASSES / GROUP</th>
                         <th className="py-3.5 px-4 font-semibold">PRIORITY ACCESS TOKEN</th>
                         <th className="py-3.5 px-4 font-semibold text-center">STATUS</th>
                         <th className="py-3.5 px-4 font-semibold">RESERVED DATE</th>
-                        <th className="py-3.5 px-4 font-semibold text-right">PHASE ACTIONS</th>
+                        <th className="py-3.5 px-4 font-semibold text-right">ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-neutral-100 dark:divide-neutral-900 text-neutral-800 dark:text-neutral-200">
                       {filtered.map((r) => {
                         const boundEvent = events.find((e) => e.id === r.event_id);
                         const isEventInSpotPhase = boundEvent?.reservation_mode && !boundEvent?.ticket_sales_mode;
+                        const isSelected = selectedReservationIds.includes(r.id);
 
                         return (
-                          <tr key={r.id} className="hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30 transition-colors">
+                          <tr key={r.id} className={`hover:bg-neutral-50/50 dark:hover:bg-neutral-900/30 transition-colors ${isSelected ? 'bg-violet-500/5 dark:bg-violet-500/10' : ''}`}>
+                            <td className="py-4 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={(e) => handleSelectReservation(r.id, e.target.checked)}
+                                className="rounded-none border-neutral-300 dark:border-neutral-700 accent-violet-600 cursor-pointer"
+                              />
+                            </td>
                             <td className="py-4 px-4">
                               <div className="space-y-0.5">
                                 <p className="font-bold text-neutral-900 dark:text-white">{r.full_name}</p>
@@ -2769,22 +2883,42 @@ export default function Admin({
                             </td>
 
                             <td className="py-4 px-4 text-right">
-                              {boundEvent && isEventInSpotPhase ? (
+                              <div className="flex items-center justify-end space-x-2">
+                                {boundEvent && isEventInSpotPhase ? (
+                                  <button
+                                    onClick={() => handleTriggerPhaseSwitch(boundEvent.id)}
+                                    disabled={triggeringPhaseSwitchId === boundEvent.id}
+                                    className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1"
+                                    title="Trigger immediate transition to Phase 2 Ticket Sales"
+                                  >
+                                    {triggeringPhaseSwitchId === boundEvent.id ? (
+                                      <span>Switching...</span>
+                                    ) : (
+                                      <span>Trigger Phase 2</span>
+                                    )}
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px] text-neutral-400 italic">Sales Live</span>
+                                )}
+
                                 <button
-                                  onClick={() => handleTriggerPhaseSwitch(boundEvent.id)}
-                                  disabled={triggeringPhaseSwitchId === boundEvent.id}
-                                  className="bg-amber-600 hover:bg-amber-500 text-white px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider font-bold transition-colors cursor-pointer disabled:opacity-50 inline-flex items-center space-x-1"
-                                  title="Trigger immediate transition to Phase 2 Ticket Sales"
+                                  onClick={() => handleResendReservationEmail(r.id || r.access_token, r.full_name)}
+                                  disabled={resendingEmailId === (r.id || r.access_token)}
+                                  className="p-1.5 text-neutral-400 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-500/10 border border-transparent hover:border-violet-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Resend Priority Access Email Notification"
                                 >
-                                  {triggeringPhaseSwitchId === boundEvent.id ? (
-                                    <span>Switching...</span>
-                                  ) : (
-                                    <span>Trigger Phase 2</span>
-                                  )}
+                                  <Mail className="h-4 w-4" />
                                 </button>
-                              ) : (
-                                <span className="text-[10px] text-neutral-400 italic">Sales Live</span>
-                              )}
+
+                                <button
+                                  onClick={() => handleDeleteSingleReservation(r.id || r.access_token, r.full_name)}
+                                  disabled={deletingReservationId === r.id}
+                                  className="p-1.5 text-neutral-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 border border-transparent hover:border-red-500/20 transition-colors cursor-pointer disabled:opacity-50"
+                                  title="Delete Reservation"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );

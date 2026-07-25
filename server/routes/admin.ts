@@ -5,7 +5,7 @@ import { db as drizzleDb } from '../../src/db/index.ts';
 import { events, bookings, galleryItems } from '../../src/db/schema.ts';
 import { requireAdmin, AuthRequest } from '../middleware/auth.ts';
 import { readDb, writeDb } from '../services/db.ts';
-import { sendConfirmationEmail } from '../services/email.ts';
+import { sendConfirmationEmail, sendMail } from '../services/email.ts';
 import { getWhatsAppDiagnostics, sendTestWhatsAppText } from '../services/whatsapp.ts';
 
 const router = Router();
@@ -29,6 +29,59 @@ router.post('/whatsapp/test', requireAdmin, async (req: AuthRequest, res: any) =
     return res.json({
       message: `WhatsApp test dispatch processed for +${result.formatted_phone}`,
       result
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin Email test dispatch
+router.post('/test-email', async (req: AuthRequest, res: any) => {
+  try {
+    const { email, subject, message } = req.body || {};
+    const recipientEmail = (email || 'sakethma007@gmail.com').trim();
+    const mailSubject = subject || '⚡ Zyron Productions - Test System Dispatch';
+    const mailHtml = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #09090b; color: #f4f4f5; margin: 0; padding: 24px; }
+          .card { max-width: 580px; margin: 0 auto; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #8b5cf6; border-radius: 12px; padding: 32px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+          .header { text-align: center; border-bottom: 1px solid #27272a; padding-bottom: 20px; margin-bottom: 24px; }
+          .brand { font-family: monospace; font-size: 20px; font-weight: 800; color: #a78bfa; letter-spacing: 3px; }
+          .box { background-color: #18181b; border: 1px solid #3f3f46; border-left: 4px solid #a78bfa; padding: 16px; border-radius: 8px; margin: 20px 0; font-size: 14px; }
+          .footer { text-align: center; margin-top: 28px; font-size: 12px; color: #71717a; border-top: 1px solid #27272a; padding-top: 16px; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="header">
+            <div class="brand">ZYRON PRODUCTIONS</div>
+            <div style="font-size: 11px; color: #a1a1aa; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;">Email Gateway Verification</div>
+          </div>
+          <h2 style="color: #ffffff; margin-top: 0;">Test Email Dispatch Successful</h2>
+          <p>This is an automated system test message dispatched from Zyron Productions.</p>
+          <div class="box">
+            <p style="margin: 0 0 6px 0; color: #a1a1aa; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">Target Recipient</p>
+            <div style="color: #a78bfa; font-weight: bold; font-family: monospace;">${recipientEmail}</div>
+            ${message ? `<p style="margin: 12px 0 0 0; color: #e4e4e7;">${message}</p>` : ''}
+          </div>
+          <p style="color: #a1a1aa; font-size: 13px;">If you received this message, the email notification pipeline is fully operational.</p>
+          <div class="footer">
+            <p style="margin: 0;">Zyron Productions &bull; System Email Verification</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    const result = await sendMail({ to: recipientEmail, subject: mailSubject, html: mailHtml });
+    return res.json({
+      success: result.success,
+      message: result.success ? `Test email successfully sent to ${recipientEmail}` : `Failed to send email to ${recipientEmail}`,
+      details: result
     });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -439,8 +492,9 @@ router.post('/reset-bookings', requireAdmin, async (req: AuthRequest, res: any) 
   try {
     const db = await readDb();
     
-    // Clear all bookings
+    // Clear all bookings and spot reservations
     db.bookings = [];
+    db.reservations = [];
     
     // Also reset tickets_sold to 0 on all events
     db.events = db.events.map((e: any) => ({
@@ -452,7 +506,7 @@ router.post('/reset-bookings', requireAdmin, async (req: AuthRequest, res: any) 
     // Write back updated state to database
     await writeDb(db);
     
-    return res.json({ success: true, message: 'All bookings cleared and event seat counts reset successfully.' });
+    return res.json({ success: true, message: 'All bookings & reservations cleared and event seat counts reset successfully.' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
