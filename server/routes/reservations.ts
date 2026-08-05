@@ -539,6 +539,469 @@ router.post('/admin/batch-delete', requireAdmin, async (req: AuthRequest, res: a
   }
 });
 
+// Admin endpoint: Resend confirmation or priority access email for a single reservation
+router.post('/admin/resend-email/:id', requireAdmin, async (req: AuthRequest, res: any) => {
+  const targetId = String(req.params.id || '').trim().toLowerCase();
+  try {
+    const db = await readDb();
+    const reservation = (db.reservations || []).find(
+      (r: any) =>
+        String(r.id || '').trim().toLowerCase() === targetId ||
+        String(r.access_token || '').trim().toLowerCase() === targetId
+    );
+
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation record not found.' });
+    }
+
+    const event = (db.events || []).find((e: any) => e.id === reservation.event_id);
+    if (!event) {
+      return res.status(404).json({ error: 'Associated event not found.' });
+    }
+
+    let emailSubject = '';
+    let emailBody = '';
+
+    if (event.reservation_mode) {
+      // Phase 1 Style: Spot Reserved
+      emailSubject = `🎉 Spot Reserved! ${event.title} - Priority Access Confirmed`;
+      emailBody = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; -webkit-font-smoothing: antialiased;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #09090b; padding: 32px 16px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" style="max-width: 580px; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #a855f7; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);">
+                  <tr>
+                    <td style="padding: 32px 28px 20px 28px; text-align: center; background-color: #0d0d10; border-bottom: 1px solid #1f1f23;">
+                      <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #c084fc; letter-spacing: 4px; text-transform: uppercase;">ZYRON PRODUCTIONS</div>
+                      <div style="font-family: monospace; font-size: 10px; color: #71717a; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;">Priority Access System</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 28px 12px 28px; text-align: center;">
+                      <div style="display: inline-block; background-color: #2e1065; color: #d8b4fe; border: 1px solid #7e22ce; padding: 6px 16px; border-radius: 9999px; font-family: monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                        ✓ Spot Reserved Successfully
+                      </div>
+                      <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 22px; font-weight: 700; font-family: Georgia, serif; line-height: 1.3;">
+                        Hi ${reservation.full_name},
+                      </h1>
+                      <p style="margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5;">
+                        Your pre-sale spot reservation for <strong style="color: #e4e4e7;">${event.title}</strong> has been confirmed.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px 28px;">
+                      <table role="presentation" width="100%" style="background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px;">
+                        <tr>
+                          <td>
+                            <div style="font-family: monospace; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px; border-bottom: 1px solid #27272a; font-weight: 700;">
+                              Reservation Details
+                            </div>
+                            <table role="presentation" width="100%" style="margin-top: 14px; font-size: 13px; line-height: 1.8;">
+                              <tr>
+                                <td style="color: #71717a; font-family: monospace; width: 40%;">PRIORITY TOKEN:</td>
+                                <td style="color: #c084fc; font-family: monospace; font-weight: 800; font-size: 16px; letter-spacing: 1px;">${reservation.access_token}</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #71717a; font-family: monospace;">RESERVED PASSES:</td>
+                                <td style="color: #f4f4f5; font-family: monospace; font-weight: 700;">${reservation.passes_count} Pass(es)</td>
+                              </tr>
+                              <tr>
+                                <td style="color: #71717a; font-family: monospace;">EVENT LOCATION:</td>
+                                <td style="color: #a1a1aa;">${event.location}</td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 28px 24px 28px; text-align: center;">
+                      <p style="margin: 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
+                        You will receive an automated email &amp; WhatsApp message as soon as ticket sales go live, giving you <strong style="color: #c084fc;">${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before the public!
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 28px; background-color: #0d0d10; border-top: 1px solid #1f1f23; text-align: center;">
+                      <p style="margin: 0; font-size: 10px; color: #71717a; font-family: monospace;">
+                        Need support? Reach out at <a href="mailto:zyroninbox@gmail.com" style="color: #c084fc; text-decoration: none;">zyroninbox@gmail.com</a> • Zyron Productions
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+    } else {
+      // Phase 2 Style: Priority Access Now Live
+      const purchaseUrl = `${process.env.APP_URL || 'http://localhost:3000'}/events/${event.slug}?access_token=${reservation.access_token}`;
+      emailSubject = `🔥 Event Passes Are Live! Priority Access for ${event.title}`;
+      emailBody = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; -webkit-font-smoothing: antialiased;">
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #09090b; padding: 32px 16px;">
+            <tr>
+              <td align="center">
+                <table role="presentation" width="100%" style="max-width: 580px; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #a855f7; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);">
+                  <tr>
+                    <td style="padding: 32px 28px 20px 28px; text-align: center; background-color: #0d0d10; border-bottom: 1px solid #1f1f23;">
+                      <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #c084fc; letter-spacing: 4px; text-transform: uppercase;">ZYRON PRODUCTIONS</div>
+                      <div style="font-family: monospace; font-size: 10px; color: #71717a; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;">Live Electronic Music & Modular Installations</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 28px 12px 28px; text-align: center;">
+                      <div style="display: inline-block; background-color: #2e1065; color: #d8b4fe; border: 1px solid #7e22ce; padding: 6px 16px; border-radius: 9999px; font-family: monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                        🚨 TICKETS NOW LIVE
+                      </div>
+                      <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 22px; font-weight: 700; font-family: Georgia, serif; line-height: 1.3;">
+                        Priority Access is ACTIVE!
+                      </h1>
+                      <p style="margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5;">
+                        Reservations for <strong style="color: #e4e4e7;">${event.title}</strong> have officially closed and <strong>Event Passes are NOW LIVE!</strong>
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 16px 28px;">
+                      <table role="presentation" width="100%" style="background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px;">
+                        <tr>
+                          <td>
+                            <div style="font-family: monospace; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px; border-bottom: 1px solid #27272a; font-weight: 700;">
+                              Your Exclusive Window
+                            </div>
+                            <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
+                              As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                            </p>
+                            <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
+                              <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
+                              <strong style="font-family: monospace; font-size: 16px; color: #c084fc; letter-spacing: 2px;">${reservation.access_token}</strong>
+                            </div>
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 12px 28px 28px 28px; text-align: center;">
+                      <a href="${purchaseUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%); color: #ffffff; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 12px; font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.45); transition: all 0.2s ease;">
+                        CLAIM YOUR PASS NOW &rarr;
+                      </a>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 24px 28px; background-color: #0d0d10; border-top: 1px solid #1f1f23; text-align: center;">
+                      <p style="margin: 0; font-size: 10px; color: #71717a; font-family: monospace;">
+                        Need support? Reach out at <a href="mailto:zyroninbox@gmail.com" style="color: #c084fc; text-decoration: none;">zyroninbox@gmail.com</a> • Zyron Productions
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+    }
+
+    const emailRes = await sendMail({
+      to: reservation.email,
+      subject: emailSubject,
+      html: emailBody
+    });
+
+    if (!emailRes.success) {
+      return res.status(500).json({ error: emailRes.error || 'Failed to dispatch email via SMTP service.' });
+    }
+
+    // Mark as notified if this was a passes live resend
+    if (!event.reservation_mode && !reservation.notified_at) {
+      reservation.notified_at = new Date().toISOString();
+      await writeDb(db);
+    }
+
+    return res.json({ success: true, message: `Successfully resent notification email to ${reservation.email}` });
+  } catch (err: any) {
+    console.error(`[ADMIN_RESEND_EMAIL_FAIL] Error:`, err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin endpoint: Explicitly switch reservation phase and notify unnotified reservation holders
+router.post('/admin/trigger-switch/:eventId', requireAdmin, async (req: AuthRequest, res: any) => {
+  const eventId = String(req.params.eventId || '').trim();
+  try {
+    const db = await readDb();
+    const event = (db.events || []).find((e: any) => e.id === eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Event not found.' });
+    }
+
+    // Move to Phase 2: Ticket sales live
+    event.reservation_mode = false;
+    event.ticket_sales_mode = true;
+    event.updated_at = new Date().toISOString();
+
+    const eventReservations = (db.reservations || []).filter(
+      (r: any) => r.event_id === event.id && r.status !== 'cancelled'
+    );
+
+    let sentCount = 0;
+    for (const r of eventReservations) {
+      if (!r.notified_at) {
+        r.notified_at = new Date().toISOString();
+        const purchaseUrl = `${process.env.APP_URL || 'http://localhost:3000'}/events/${event.slug}?access_token=${r.access_token}`;
+        
+        const emailSubject = `🔥 Event Passes Are Live! Priority Access for ${event.title}`;
+        const emailBody = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; -webkit-font-smoothing: antialiased;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #09090b; padding: 32px 16px;">
+              <tr>
+                <td align="center">
+                  <table role="presentation" width="100%" style="max-width: 580px; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #a855f7; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);">
+                    <tr>
+                      <td style="padding: 32px 28px 20px 28px; text-align: center; background-color: #0d0d10; border-bottom: 1px solid #1f1f23;">
+                        <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #c084fc; letter-spacing: 4px; text-transform: uppercase;">ZYRON PRODUCTIONS</div>
+                        <div style="font-family: monospace; font-size: 10px; color: #71717a; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;">Live Electronic Music & Modular Installations</div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 24px 28px 12px 28px; text-align: center;">
+                        <div style="display: inline-block; background-color: #2e1065; color: #d8b4fe; border: 1px solid #7e22ce; padding: 6px 16px; border-radius: 9999px; font-family: monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                          🚨 TICKETS NOW LIVE
+                        </div>
+                        <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 22px; font-weight: 700; font-family: Georgia, serif; line-height: 1.3;">
+                          Priority Access is ACTIVE!
+                        </h1>
+                        <p style="margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5;">
+                          Pre-sales for <strong style="color: #e4e4e7;">${event.title}</strong> have opened and <strong>Event Passes are NOW LIVE!</strong>
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 28px;">
+                        <table role="presentation" width="100%" style="background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px;">
+                          <tr>
+                            <td>
+                              <div style="font-family: monospace; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px; border-bottom: 1px solid #27272a; font-weight: 700;">
+                                Your Exclusive Window
+                              </div>
+                              <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
+                                As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                              </p>
+                              <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
+                                <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
+                                <strong style="font-family: monospace; font-size: 16px; color: #c084fc; letter-spacing: 2px;">${r.access_token}</strong>
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 12px 28px 28px 28px; text-align: center;">
+                        <a href="${purchaseUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%); color: #ffffff; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 12px; font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.45); transition: all 0.2s ease;">
+                          CLAIM YOUR PASS NOW &rarr;
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 24px 28px; background-color: #0d0d10; border-top: 1px solid #1f1f23; text-align: center;">
+                        <p style="margin: 0; font-size: 10px; color: #71717a; font-family: monospace;">
+                          Need support? Reach out at <a href="mailto:zyroninbox@gmail.com" style="color: #c084fc; text-decoration: none;">zyroninbox@gmail.com</a> • Zyron Productions
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+          </html>
+        `;
+        
+        sendMail({ to: r.email, subject: emailSubject, html: emailBody }).catch((err) => {
+          console.error(`[TRIGGER_SWITCH_EMAIL_ERR] Failed to send to ${r.email}:`, err);
+        });
+        sentCount++;
+      }
+    }
+
+    await writeDb(db);
+    return res.json({
+      success: true,
+      message: `Successfully transitioned event to Phase 2. Priority access notifications sent to ${sentCount} un-notified reservation holder(s).`
+    });
+  } catch (err: any) {
+    console.error(`[ADMIN_TRIGGER_SWITCH_FAIL] Error:`, err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Admin endpoint: Send bulk "Passes Live" emails explicitly to all active reservation holders
+router.post('/admin/send-passes-live-bulk', requireAdmin, async (req: AuthRequest, res: any) => {
+  const { eventId, forceResend } = req.body || {};
+  if (!eventId) {
+    return res.status(400).json({ error: 'An event ID is required for bulk dispatcher.' });
+  }
+
+  try {
+    const db = await readDb();
+    const event = (db.events || []).find((e: any) => e.id === eventId);
+    if (!event) {
+      return res.status(404).json({ error: 'Target event not found.' });
+    }
+
+    // Move to Phase 2 if not already there, representing that reservations are over & passes are live
+    let updatedPhase = false;
+    if (event.reservation_mode || !event.ticket_sales_mode) {
+      event.reservation_mode = false;
+      event.ticket_sales_mode = true;
+      event.updated_at = new Date().toISOString();
+      updatedPhase = true;
+    }
+
+    // Filter reservations for this event that are active
+    const eventReservations = (db.reservations || []).filter(
+      (r: any) => r.event_id === event.id && r.status !== 'cancelled'
+    );
+
+    if (eventReservations.length === 0) {
+      if (updatedPhase) await writeDb(db);
+      return res.json({
+        success: true,
+        count: 0,
+        message: 'No reservations found to notify, but ticket sales mode has been activated successfully.'
+      });
+    }
+
+    let sentCount = 0;
+    const protocol = req.headers['x-forwarded-proto'] || 'http';
+    const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:3000';
+    const appUrl = `${protocol}://${host}`;
+
+    for (const r of eventReservations) {
+      if (forceResend || !r.notified_at) {
+        r.notified_at = new Date().toISOString();
+        const purchaseUrl = `${appUrl}/events/${event.slug}?access_token=${r.access_token}`;
+        
+        const emailSubject = `🔥 Event Passes Are Live! Priority Access for ${event.title}`;
+        const emailBody = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="margin: 0; padding: 0; background-color: #09090b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #f4f4f5; -webkit-font-smoothing: antialiased;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #09090b; padding: 32px 16px;">
+              <tr>
+                <td align="center">
+                  <table role="presentation" width="100%" style="max-width: 580px; background-color: #121215; border: 1px solid #27272a; border-top: 3px solid #a855f7; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);">
+                    <tr>
+                      <td style="padding: 32px 28px 20px 28px; text-align: center; background-color: #0d0d10; border-bottom: 1px solid #1f1f23;">
+                        <div style="font-family: monospace; font-size: 20px; font-weight: 800; color: #c084fc; letter-spacing: 4px; text-transform: uppercase;">ZYRON PRODUCTIONS</div>
+                        <div style="font-family: monospace; font-size: 10px; color: #71717a; letter-spacing: 2px; margin-top: 6px; text-transform: uppercase;">Live Electronic Music & Modular Installations</div>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 24px 28px 12px 28px; text-align: center;">
+                        <div style="display: inline-block; background-color: #2e1065; color: #d8b4fe; border: 1px solid #7e22ce; padding: 6px 16px; border-radius: 9999px; font-family: monospace; font-size: 11px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 16px;">
+                          🚨 TICKETS NOW LIVE
+                        </div>
+                        <h1 style="margin: 0 0 10px 0; color: #ffffff; font-size: 22px; font-weight: 700; font-family: Georgia, serif; line-height: 1.3;">
+                          Priority Access is ACTIVE!
+                        </h1>
+                        <p style="margin: 0; color: #a1a1aa; font-size: 14px; line-height: 1.5;">
+                          Pre-sales for <strong style="color: #e4e4e7;">${event.title}</strong> have opened and <strong>Event Passes are NOW LIVE!</strong>
+                        </p>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 16px 28px;">
+                        <table role="presentation" width="100%" style="background-color: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 20px;">
+                          <tr>
+                            <td>
+                              <div style="font-family: monospace; font-size: 11px; color: #a1a1aa; text-transform: uppercase; letter-spacing: 1.5px; padding-bottom: 12px; border-bottom: 1px solid #27272a; font-weight: 700;">
+                                Your Exclusive Window
+                              </div>
+                              <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
+                                As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                              </p>
+                              <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
+                                <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
+                                <strong style="font-family: monospace; font-size: 16px; color: #c084fc; letter-spacing: 2px;">${r.access_token}</strong>
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 12px 28px 28px 28px; text-align: center;">
+                        <a href="${purchaseUrl}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #7c3aed 0%, #9333ea 100%); color: #ffffff; padding: 14px 28px; border-radius: 10px; text-decoration: none; font-weight: 800; font-size: 12px; font-family: monospace; letter-spacing: 1.5px; text-transform: uppercase; box-shadow: 0 4px 18px rgba(124, 58, 237, 0.45); transition: all 0.2s ease;">
+                          CLAIM YOUR PASS NOW &rarr;
+                        </a>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 24px 28px; background-color: #0d0d10; border-top: 1px solid #1f1f23; text-align: center;">
+                        <p style="margin: 0; font-size: 10px; color: #71717a; font-family: monospace;">
+                          Need support? Reach out at <a href="mailto:zyroninbox@gmail.com" style="color: #c084fc; text-decoration: none;">zyroninbox@gmail.com</a> • Zyron Productions
+                        </p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </body>
+          </html>
+        `;
+        
+        sendMail({ to: r.email, subject: emailSubject, html: emailBody }).catch((err) => {
+          console.error(`[BULK_EMAIL_DISPATCH_ERR] Failed to send to ${r.email}:`, err);
+        });
+        sentCount++;
+      }
+    }
+
+    await writeDb(db);
+    return res.json({
+      success: true,
+      count: sentCount,
+      message: `Bulk notification dispatch initiated. Sent "Passes Live" emails to ${sentCount} reservation holder(s) for "${event.title}".`
+    });
+  } catch (err: any) {
+    console.error(`[ADMIN_SEND_PASSES_LIVE_BULK_FAIL] Error:`, err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // User endpoint: Delete / Cancel single spot reservation
 router.delete('/:id', async (req: AuthRequest, res: any) => {
   const reqTime = new Date().toISOString();

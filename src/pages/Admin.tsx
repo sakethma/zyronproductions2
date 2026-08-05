@@ -859,6 +859,53 @@ export default function Admin({
   const [deletingReservationId, setDeletingReservationId] = useState<string | null>(null);
   const [deletingBatchReservations, setDeletingBatchReservations] = useState(false);
   const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
+  const [sendingBulkPassesLive, setSendingBulkPassesLive] = useState(false);
+  const [bulkNotifyConfirmOpen, setBulkNotifyConfirmOpen] = useState(false);
+  const [bulkNotifyDetails, setBulkNotifyDetails] = useState({ count: 0, eventName: '' });
+
+  const handleSendBulkPassesLive = async () => {
+    if (reservationEventFilter === 'all') {
+      triggerToast('Please select a specific experience from the dropdown first.');
+      return;
+    }
+
+    const filteredEvent = events.find(e => e.id === reservationEventFilter);
+    const eventName = filteredEvent?.title || 'Selected Experience';
+
+    const toNotifyCount = reservationsList.filter(
+      (r) => r.event_id === reservationEventFilter && r.status !== 'cancelled'
+    ).length;
+
+    if (toNotifyCount === 0) {
+      triggerToast(`No active reservations found for "${eventName}".`);
+      return;
+    }
+
+    setBulkNotifyDetails({ count: toNotifyCount, eventName });
+    setBulkNotifyConfirmOpen(true);
+  };
+
+  const handleExecuteBulkPassesLive = async () => {
+    setBulkNotifyConfirmOpen(false);
+    setSendingBulkPassesLive(true);
+    try {
+      const res = await apiFetch('/api/reservations/admin/send-passes-live-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId: reservationEventFilter, forceResend: true })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to dispatch bulk emails.');
+      triggerToast(data.message || `Successfully sent passes live notifications to reservation holder(s)!`);
+      fetchReservations();
+      refetchEvents();
+      fetchAdminEvents();
+    } catch (err: any) {
+      triggerToast(err.message || 'Error executing bulk dispatch.');
+    } finally {
+      setSendingBulkPassesLive(false);
+    }
+  };
 
   const handleResendReservationEmail = async (id: string, name: string) => {
     setResendingEmailId(id);
@@ -2620,6 +2667,25 @@ export default function Admin({
                 <Download className={`h-4 w-4 ${downloadingReservationsCsv ? 'animate-bounce' : ''}`} />
                 <span>{downloadingReservationsCsv ? 'Exporting CSV...' : 'Export CSV Report'}</span>
               </button>
+
+              <button
+                id="btn-send-bulk-passes-live"
+                onClick={handleSendBulkPassesLive}
+                disabled={sendingBulkPassesLive}
+                className={`flex items-center space-x-2 px-4 py-2 text-xs font-mono font-bold uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-50 border shadow-xs ${
+                  reservationEventFilter === 'all'
+                    ? 'border-neutral-200 dark:border-neutral-800 bg-neutral-100 dark:bg-neutral-900 text-neutral-400 dark:text-neutral-600 cursor-not-allowed'
+                    : 'bg-violet-600 hover:bg-violet-500 text-white border-violet-500/30'
+                }`}
+                title={
+                  reservationEventFilter === 'all'
+                    ? 'Please filter by a specific Experience first to send bulk emails'
+                    : "Send bulk 'Passes Live' email notification to all active reservation holders for this experience"
+                }
+              >
+                <Mail className={`h-4 w-4 ${sendingBulkPassesLive ? 'animate-pulse' : ''}`} />
+                <span>{sendingBulkPassesLive ? 'Notifying...' : 'Notify All (Bulk)'}</span>
+              </button>
             </div>
           </div>
 
@@ -3271,6 +3337,43 @@ export default function Admin({
                 className="bg-red-600 text-white hover:bg-red-700 px-4 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
               >
                 Confirm Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog: Bulk send Passes Live notifications */}
+      {bulkNotifyConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 backdrop-blur-xs">
+          <div className="border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-950 max-w-md w-full p-6 md:p-8 space-y-6 text-left">
+            <div className="flex items-start space-x-3 text-violet-600 dark:text-violet-500">
+              <Mail className="h-6 w-6 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-serif text-lg font-bold text-neutral-900 dark:text-white">Send Passes Live Notifications?</h3>
+                <p className="text-xs text-neutral-500 mt-2 font-light leading-relaxed">
+                  You are about to dispatch a bulk "Passes Live" email to all <strong className="text-neutral-900 dark:text-white">{bulkNotifyDetails.count}</strong> active reservation holder(s) for <strong className="text-neutral-900 dark:text-white">"{bulkNotifyDetails.eventName}"</strong>.
+                </p>
+                <p className="text-xs text-neutral-500 mt-2 font-light leading-relaxed">
+                  This will notify them that pre-sales are open, transition the experience to Phase 2 (Ticket Sales mode) automatically, and send their priority claim links.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                id="btn-bulk-notify-cancel"
+                onClick={() => setBulkNotifyConfirmOpen(false)}
+                className="border border-neutral-200 dark:border-neutral-800 px-4 py-2 text-xs font-mono uppercase text-neutral-700 dark:text-neutral-300 hover:border-black dark:hover:border-white transition-colors cursor-pointer"
+              >
+                No, Go Back
+              </button>
+              <button
+                id="btn-bulk-notify-confirm"
+                onClick={handleExecuteBulkPassesLive}
+                className="bg-violet-600 text-white hover:bg-violet-500 px-4 py-2 text-xs font-mono uppercase transition-colors cursor-pointer"
+              >
+                Yes, Dispatch Bulk Emails
               </button>
             </div>
           </div>
