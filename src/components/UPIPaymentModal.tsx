@@ -227,21 +227,7 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
                 </button>
               </div>
 
-              {/* Deep Link Quick App Buttons */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <a
-                  href={upiPayload}
-                  className="py-2 px-3 bg-purple-950/80 hover:bg-purple-900 border border-purple-800/60 rounded-xl text-center text-purple-200 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <span>Pay via PhonePe</span>
-                </a>
-                <a
-                  href={upiPayload}
-                  className="py-2 px-3 bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 rounded-xl text-center text-neutral-200 text-xs font-mono font-bold flex items-center justify-center gap-1.5 transition-colors"
-                >
-                  <span>Pay via GPay / Any</span>
-                </a>
-              </div>
+              {/* Deep Link Quick App Buttons Removed due to NPCI security blocking non-merchant intent URIs. Rely on QR / manual copy. */}
             </div>
 
             {/* Next Action */}
