@@ -379,7 +379,7 @@ export default function ReservationSection({
                 Event Passes Live
               </h2>
               <p className="text-xs text-neutral-400 font-sans mt-1 max-w-xl">
-                Every reservation holder receives SMS, WhatsApp, and Email with a private purchase link. Reservation holders get <strong>24 hours of Early Access</strong> before public sales open to everyone.
+                Every reservation holder receives SMS, WhatsApp, and Email with a private purchase link. Priority reservations will be automatically applied at checkout.
               </p>
             </div>
 

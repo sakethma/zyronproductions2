@@ -103,13 +103,9 @@ export default function Events({
                     className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-103"
                     referrerPolicy="no-referrer"
                   />
-                  {isSoldOut ? (
+                  {isSoldOut && (
                     <span className="absolute top-3 right-3 bg-neutral-950 dark:bg-white text-white dark:text-neutral-950 px-2 py-1 text-[10px] font-mono tracking-widest uppercase">
                       Sold Out
-                    </span>
-                  ) : (
-                    <span className="absolute top-3 right-3 bg-white/90 text-neutral-950 border border-neutral-200 dark:border-neutral-800 dark:bg-neutral-950/95 dark:text-white px-2 py-1 text-[10px] font-mono tracking-widest uppercase">
-                      {event.capacity - event.tickets_sold} remaining
                     </span>
                   )}
                 </div>

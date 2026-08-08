@@ -78,7 +78,7 @@ export async function evaluateAutoSwitch(dbState?: DbState): Promise<{ switchedC
                                     Your Exclusive Window
                                   </div>
                                   <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                                    As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                                    As a reservation holder, you have <strong>Priority Access</strong> to claim your pass.
                                   </p>
                                   <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
                                     <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
@@ -256,7 +256,7 @@ router.post('/', async (req, res: any) => {
                 <tr>
                   <td style="padding: 12px 28px 24px 28px; text-align: center;">
                     <p style="margin: 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                      You will receive an automated email &amp; WhatsApp message as soon as ticket sales go live, giving you <strong style="color: #c084fc;">${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before the public!
+                      You will receive an automated email &amp; WhatsApp message as soon as ticket sales go live, giving you <strong style="color: #c084fc;">Priority Access</strong> to claim your pass!
                     </p>
                   </td>
                 </tr>
@@ -626,7 +626,7 @@ router.post('/admin/resend-email/:id', requireAdmin, async (req: AuthRequest, re
                   <tr>
                     <td style="padding: 12px 28px 24px 28px; text-align: center;">
                       <p style="margin: 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                        You will receive an automated email &amp; WhatsApp message as soon as ticket sales go live, giving you <strong style="color: #c084fc;">${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before the public!
+                        You will receive an automated email &amp; WhatsApp message as soon as ticket sales go live, giving you <strong style="color: #c084fc;">Priority Access</strong> to claim your pass!
                       </p>
                     </td>
                   </tr>
@@ -688,7 +688,7 @@ router.post('/admin/resend-email/:id', requireAdmin, async (req: AuthRequest, re
                               Your Exclusive Window
                             </div>
                             <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                              As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                              As a reservation holder, you have <strong>Priority Access</strong> to claim your pass.
                             </p>
                             <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
                               <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
@@ -811,7 +811,7 @@ router.post('/admin/trigger-switch/:eventId', requireAdmin, async (req: AuthRequ
                                 Your Exclusive Window
                               </div>
                               <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                                As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                                As a reservation holder, you have <strong>Priority Access</strong> to claim your pass.
                               </p>
                               <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
                                 <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
@@ -950,7 +950,7 @@ router.post('/admin/send-passes-live-bulk', requireAdmin, async (req: AuthReques
                                 Your Exclusive Window
                               </div>
                               <p style="margin: 14px 0 0 0; color: #d4d4d8; font-size: 13px; line-height: 1.6;">
-                                As a reservation holder, you have <strong>${event.early_access_duration_hours || 24} hours of Early Access</strong> to claim your pass before public sales open.
+                                As a reservation holder, you have <strong>Priority Access</strong> to claim your pass.
                               </p>
                               <div style="margin-top: 16px; padding: 12px; background-color: #09090b; border: 1px dashed #3f3f46; border-radius: 6px; text-align: center;">
                                 <span style="font-family: monospace; font-size: 10px; color: #71717a; display: block; margin-bottom: 4px;">ACCESS TOKEN</span>
