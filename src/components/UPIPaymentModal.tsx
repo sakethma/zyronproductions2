@@ -28,9 +28,9 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
   const passTierName = (booking.tier || 'GENERAL').toUpperCase();
   const passQuantity = booking.quantity || 1;
 
-  // Dynamic PhonePe & UPI Payment payload string matching selected pass amount
-  const noteText = `Zyron ${passTierName} Pass x${passQuantity}`;
-  const upiPayload = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amountRs}&tr=${bookingDisplayId}&tn=${encodeURIComponent(noteText)}&cu=INR`;
+  // Clean UPI string without merchant-only parameters (tr) to avoid NPCI security declines on personal/P2P handles
+  const noteText = `Pass ${bookingDisplayId}`;
+  const upiPayload = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(payeeName)}&am=${amountRs}&tn=${encodeURIComponent(noteText)}&cu=INR`;
 
   const copyUpiId = () => {
     navigator.clipboard.writeText(upiId);
@@ -183,6 +183,21 @@ export default function UPIPaymentModal({ booking, onClose, onSuccess }: UPIPaym
                 </p>
               </div>
 
+            </div>
+
+            {/* PhonePe / UPI Security Warning Notice Box */}
+            <div className="p-3.5 bg-purple-950/40 border border-purple-800/60 rounded-xl space-y-1.5 text-xs text-purple-200">
+              <div className="flex items-center gap-1.5 font-bold font-mono text-purple-300">
+                <AlertCircle className="h-4 w-4 shrink-0 text-amber-400" />
+                <span>If PhonePe says "Declined for security reasons":</span>
+              </div>
+              <p className="text-[11px] text-neutral-300 leading-normal pl-5">
+                NPCI blocks direct app redirects for non-merchant UPI handles.
+                <strong className="text-white block mt-1">Easy 2-second fix:</strong>
+                1. Click <span className="text-purple-300 font-bold font-mono">Copy UPI</span> below (<code className="text-emerald-400 font-mono">zyronproductions@axl</code>)<br/>
+                2. Open PhonePe &rarr; Tap <strong className="text-white">"To UPI ID"</strong><br/>
+                3. Paste <code className="text-emerald-400 font-mono">zyronproductions@axl</code>, enter <strong className="text-emerald-400 font-mono">₹{amountRs}</strong> & pay!
+              </p>
             </div>
 
             {/* Quick App Launcher / Copy Strip */}
