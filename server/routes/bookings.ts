@@ -1,10 +1,11 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import fs from 'fs/promises';
+import jwt from 'jsonwebtoken';
 import { eq, desc, and, isNull } from 'drizzle-orm';
 import { db as drizzleDb } from '../../src/db/index.ts';
-import { bookings, events } from '../../src/db/schema.ts';
-import { requireAuth, AuthRequest } from '../middleware/auth.ts';
+import { bookings, events, users } from '../../src/db/schema.ts';
+import { requireAuth, optionalAuth, getJwtSecret, AuthRequest } from '../middleware/auth.ts';
 import { readDb, writeDb } from '../services/db.ts';
 import { sendConfirmationEmail } from '../services/email.ts';
 import { sendWhatsAppConfirmation } from '../services/whatsapp.ts';
@@ -44,8 +45,8 @@ router.get('/my', requireAuth, async (req: AuthRequest, res) => {
   }
 });
 
-// Validate coupon
-router.post('/validate-coupon', requireAuth, async (req: AuthRequest, res: any) => {
+// Validate coupon (Public endpoint - no authentication required)
+router.post('/validate-coupon', async (req: Request, res: Response) => {
   let { code, event_id, ticket_price_cents, quantity } = req.body;
   if (!code) {
     return res.status(400).json({ error: 'Coupon code is required.' });
@@ -104,8 +105,8 @@ router.post('/validate-coupon', requireAuth, async (req: AuthRequest, res: any) 
   }
 });
 
-// Create booking
-router.post('/', requireAuth, async (req: AuthRequest, res) => {
+// Create booking (Optional auth for guest visitors)
+router.post('/', optionalAuth, async (req: AuthRequest, res) => {
   let { event_id, tier, quantity, guest_name, guest_email, guest_phone, guest_instagram, coupon_code, additional_guests } = req.body;
   event_id = typeof event_id === 'string' ? event_id.trim() : event_id;
   tier = typeof tier === 'string' ? tier.trim() : tier;
@@ -183,9 +184,37 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
       validatedCouponCode = coupon.code;
     }
 
+    let userId = req.user?.id || req.user?.uid;
+    let tokenToReturn: string | null = null;
+    let userToReturn: any = req.user || null;
+
+    if (!userId) {
+      const normalizedEmail = guest_email.toLowerCase().trim();
+      try {
+        const existing = await drizzleDb.select().from(users).where(eq(users.email, normalizedEmail));
+        if (existing.length > 0) {
+          userId = existing[0].uid;
+          userToReturn = existing[0];
+        } else {
+          const guestUid = 'uid-guest-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+          const newUser = await drizzleDb.insert(users).values({
+            uid: guestUid,
+            email: normalizedEmail,
+            role: 'user'
+          }).returning();
+          userId = newUser[0]?.uid || guestUid;
+          userToReturn = newUser[0];
+        }
+        
+        tokenToReturn = jwt.sign({ uid: userId, email: normalizedEmail, role: 'user' }, getJwtSecret(), { expiresIn: '7d' });
+      } catch (e) {
+        userId = 'guest-' + Date.now();
+      }
+    }
+
     const newBooking = {
       id: crypto.randomUUID(),
-      user_id: req.user.id,
+      user_id: userId,
       event_id,
       tier,
       quantity,
@@ -210,14 +239,18 @@ router.post('/', requireAuth, async (req: AuthRequest, res) => {
     db.bookings.push(newBooking);
     await writeDb(db);
 
-    return res.json(newBooking);
+    return res.json({
+      ...newBooking,
+      token: tokenToReturn,
+      user: userToReturn
+    });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }
 });
 
 // Preferences update
-router.post('/:id/preferences', requireAuth, async (req: AuthRequest, res) => {
+router.post('/:id/preferences', optionalAuth, async (req: AuthRequest, res) => {
   const { dietary, role_preference, accessibility } = req.body;
   try {
     const db = await readDb();
@@ -226,7 +259,7 @@ router.post('/:id/preferences', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Booking not found.' });
     }
 
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (req.user && req.user.role !== 'admin' && booking.user_id && booking.user_id !== req.user.id && booking.user_id !== req.user.uid) {
       return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
     }
 
@@ -243,7 +276,7 @@ router.post('/:id/preferences', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // Cancel booking
-router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res) => {
+router.post('/:id/cancel', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const db = await readDb();
     const booking = db.bookings.find((b: any) => b.id === req.params.id);
@@ -251,7 +284,7 @@ router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Booking not found.' });
     }
 
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (req.user && req.user.role !== 'admin' && booking.user_id && booking.user_id !== req.user.id && booking.user_id !== req.user.uid) {
       return res.status(403).json({ error: 'Forbidden. You do not own this booking.' });
     }
 
@@ -276,7 +309,7 @@ router.post('/:id/cancel', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // Simulated payment
-router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
+router.post('/:id/pay', optionalAuth, async (req: AuthRequest, res) => {
   const { payment_ref } = req.body;
   try {
     const db = await readDb();
@@ -285,7 +318,7 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Booking not found.' });
     }
 
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (req.user && req.user.role !== 'admin' && booking.user_id && booking.user_id !== req.user.id && booking.user_id !== req.user.uid) {
       return res.status(403).json({ error: 'Forbidden.' });
     }
 
@@ -329,14 +362,14 @@ router.post('/:id/pay', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // DEV bypass
-router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
+router.post('/:id/dev-bypass', optionalAuth, async (req: AuthRequest, res) => {
   try {
     const bookingId = req.params.id;
     const db = await readDb();
     const booking = db.bookings.find((b: any) => b.id === bookingId);
     
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (req.user && req.user.role !== 'admin' && booking.user_id && booking.user_id !== req.user.id && booking.user_id !== req.user.uid) {
       return res.status(403).json({ error: 'Forbidden' });
     }
 
@@ -379,7 +412,7 @@ router.post('/:id/dev-bypass', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // Create Cashfree order
-router.post('/:id/cashfree-order', requireAuth, async (req: AuthRequest, res: any) => {
+router.post('/:id/cashfree-order', optionalAuth, async (req: AuthRequest, res: any) => {
   try {
     const bookingId = req.params.id;
     const db = await readDb();
@@ -389,7 +422,7 @@ router.post('/:id/cashfree-order', requireAuth, async (req: AuthRequest, res: an
     if (booking.payment_status === 'paid') return res.status(400).json({ error: 'Already paid' });
     
     const reqUser = (req as any).user;
-    if (booking.user_id !== reqUser.id && reqUser.role !== 'admin') {
+    if (reqUser && reqUser.role !== 'admin' && booking.user_id && booking.user_id !== reqUser.id && booking.user_id !== reqUser.uid) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
@@ -455,7 +488,7 @@ router.post('/:id/cashfree-order', requireAuth, async (req: AuthRequest, res: an
 });
 
 // Verify Cashfree Payment
-router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: any) => {
+router.post('/:id/verify-cashfree', optionalAuth, async (req: AuthRequest, res: any) => {
   try {
     const { order_id } = req.body;
     const bookingId = req.params.id;
@@ -473,7 +506,7 @@ router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: a
     if (!booking) return res.status(404).json({ error: 'Booking not found' });
     
     const reqUser = (req as any).user;
-    if (booking.user_id !== reqUser.id && reqUser.role !== 'admin') {
+    if (reqUser && reqUser.role !== 'admin' && booking.user_id && booking.user_id !== reqUser.id && booking.user_id !== reqUser.uid) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
@@ -548,16 +581,16 @@ router.post('/:id/verify-cashfree', requireAuth, async (req: AuthRequest, res: a
 });
 
 // Legacy Razorpay compatibility endpoints
-router.post('/:id/razorpay-order', requireAuth, async (req: AuthRequest, res: any) => {
+router.post('/:id/razorpay-order', optionalAuth, async (req: AuthRequest, res: any) => {
   return res.redirect(307, `/api/bookings/${req.params.id}/cashfree-order`);
 });
 
-router.post('/:id/verify-razorpay', requireAuth, async (req: AuthRequest, res: any) => {
+router.post('/:id/verify-razorpay', optionalAuth, async (req: AuthRequest, res: any) => {
   return res.redirect(307, `/api/bookings/${req.params.id}/verify-cashfree`);
 });
 
 // Submit UPI Payment Proof (UTR + Screenshot) for Manual Review
-router.post('/:id/submit-proof', requireAuth, async (req: AuthRequest, res: any) => {
+router.post('/:id/submit-proof', optionalAuth, async (req: AuthRequest, res: any) => {
   const { utr, screenshot, guest_name, guest_email, guest_phone } = req.body;
   try {
     const db = await readDb();
@@ -566,7 +599,7 @@ router.post('/:id/submit-proof', requireAuth, async (req: AuthRequest, res: any)
       return res.status(404).json({ error: 'Booking not found.' });
     }
 
-    if (booking.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (req.user && req.user.role !== 'admin' && booking.user_id && booking.user_id !== req.user.id && booking.user_id !== req.user.uid) {
       return res.status(403).json({ error: 'Forbidden.' });
     }
 

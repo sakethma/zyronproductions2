@@ -64,6 +64,33 @@ export const requireAuth = async (
   }
 };
 
+export const optionalAuth = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET) as { uid: string; email: string; role: string };
+      const result = await db.select().from(users).where(eq(users.uid, decoded.uid));
+      const dbUser = result[0];
+      if (dbUser) {
+        const adminEmails = ['admin@zyron.events', 'sakethma007@gmail.com', 'zyronproductions@gmail.com'];
+        if (dbUser.email && adminEmails.includes(dbUser.email.toLowerCase().trim()) && dbUser.role !== 'admin') {
+          dbUser.role = 'admin';
+          await db.update(users).set({ role: 'admin' }).where(eq(users.uid, dbUser.uid));
+        }
+        req.user = { ...dbUser, id: dbUser.uid };
+      }
+    } catch (error) {
+      // Ignore token verification errors for optional auth
+    }
+  }
+  next();
+};
+
 export const requireAdmin = async (
   req: AuthRequest,
   res: Response,

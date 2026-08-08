@@ -188,6 +188,12 @@ export default function App() {
     if (!response.ok) {
       throw new Error(data.error || 'Booking request failed');
     }
+    if (data.token) {
+      localStorage.setItem('dev_token', data.token);
+    }
+    if (data.user) {
+      setUser(data.user);
+    }
     return data;
   };
 
