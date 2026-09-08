@@ -14,7 +14,7 @@ const hasSql = !!process.env.SQL_HOST || !!process.env.DATABASE_URL;
 export const createPool = () => {
   if (!hasSql) return null;
 
-  if (process.env.DATABASE_URL) {
+  if (process.env.DATABASE_URL && !process.env.SQL_HOST) {
     const isSsl = process.env.SQL_SSL === 'true' || 
                   process.env.DATABASE_URL.includes('neon.tech') || 
                   process.env.DATABASE_URL.includes('render.com') ||
