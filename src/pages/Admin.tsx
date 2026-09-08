@@ -8,6 +8,7 @@ import { apiFetch } from '../lib/api';
 import { Shield, BarChart3, CalendarDays, Users2, Image as ImageIcon, Plus, Edit, Trash2, XCircle, AlertCircle, TrendingUp, DollarSign, Ticket, RefreshCw, Layers, Download, Scan, CheckCircle2, Mail, Bell, Sparkles, Search, Filter, Copy, UserCheck, Clock } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts';
 import QRScanner from '../components/QRScanner';
+import TicketGenerator from '../components/TicketGenerator';
 import { Event, Booking, GalleryItem, AdminAnalytics, User, TicketTier, EventStatus } from '../types';
 
 interface AdminProps {
@@ -17,7 +18,7 @@ interface AdminProps {
   setCurrentRoute: (route: string) => void;
 }
 
-type AdminTab = 'analytics' | 'payments' | 'events' | 'guests' | 'reservations' | 'gallery' | 'coupons' | 'diagnostics';
+type AdminTab = 'analytics' | 'generator' | 'payments' | 'events' | 'guests' | 'reservations' | 'gallery' | 'coupons' | 'diagnostics';
 
 export default function Admin({
   user,
@@ -1164,7 +1165,7 @@ export default function Admin({
         {/* Tab Controls */}
         <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide border border-neutral-200 dark:border-neutral-800 p-1 bg-neutral-50 dark:bg-neutral-900 max-w-full">
           {[
-            { id: 'analytics', label: 'Metrics', icon: BarChart3 },
+            { id: 'analytics', label: 'Metrics', icon: BarChart3 }, { id: 'generator', label: 'Generator', icon: Sparkles },
             { id: 'payments', label: 'Pending Approvals', icon: CheckCircle2 },
             { id: 'events', label: 'Events', icon: CalendarDays },
             { id: 'guests', label: 'Guests', icon: Users2 },
@@ -1196,6 +1197,11 @@ export default function Admin({
       </div>
 
       {/* -------------------- TAB 1: METRICS / ANALYTICS -------------------- */}
+      
+      {activeTab === 'generator' && (
+        <TicketGenerator events={events} />
+      )}
+
       {activeTab === 'analytics' && (
         <div className="space-y-8">
           {loadingAnalytics ? (
